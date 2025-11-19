@@ -1,0 +1,32 @@
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    /**
+     * Run the migrations.
+     */
+    // database/migrations/xxxx_xx_xx_xxxxxx_create_post_tags_table.php
+// ...
+    public function up(): void
+    {
+        Schema::create('post_tags', function (Blueprint $table) {
+            $table->foreignId('post_id')->constrained('posts')->onDelete('cascade');
+            $table->foreignId('tag_id')->constrained('tags')->onDelete('cascade');
+            $table->primary(['post_id', 'tag_id']); // Composite primary key
+            $table->timestamps(); // Meskipun tidak ada di tabel PG Anda, bagusnya tetap ada di Laravel
+        });
+    }
+// ...
+
+    /**
+     * Reverse the migrations.
+     */
+    public function down(): void
+    {
+        Schema::dropIfExists('post_tags');
+    }
+};
