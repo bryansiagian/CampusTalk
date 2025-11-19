@@ -1,3 +1,4 @@
+// lib/models/category.dart
 class Category {
   final int id;
   final String name;
@@ -6,8 +7,8 @@ class Category {
 
   factory Category.fromJson(Map<String, dynamic> json) {
     return Category(
-      id: json['id'],
-      name: json['name'],
+      id: json['id'] as int,
+      name: json['name'] as String,
     );
   }
 }

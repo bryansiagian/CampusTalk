@@ -1,3 +1,4 @@
+// lib/screens/post/post_detail_screen.dart
 import 'package:flutter/material.dart';
 import '../../services/api_services.dart';
 import '../../models/post.dart';
@@ -45,10 +46,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Komentar berhasil ditambahkan'))
       );
-      _fetchPostData();
+      _fetchPostData(); // Ini seharusnya sudah memicu refresh UI
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Gagal menemukan komentar: ${e.toString}'))
+        SnackBar(content: Text('Gagal menemukan komentar: ${e.toString()}'))
       );
     }
   }
@@ -71,7 +72,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Gagal memperbarui like'))
         );
-      } 
+      }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text('Error: ${e.toString()}'))
@@ -102,7 +103,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
           } else {
             final post = snapshot.data!;
 
-            bool userHasLiked = false;
+            // Anda perlu menentukan userHasLiked dari data Post atau dari API
+            // Contoh sederhana (perlu logika otentikasi user saat ini dan data like dari API):
+            bool userHasLiked = false; // Ini perlu diisi dari data post yang sebenarnya.
 
             return ListView(
               padding: const EdgeInsets.all(16.0),
@@ -168,8 +171,9 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                     if (commentsSnapshot.connectionState == ConnectionState.waiting) {
                       return Center(child: SpinKitThreeBounce(color: Theme.of(context).primaryColor, size: 20.0));
                     } else if (commentsSnapshot.hasError) {
-                      return Text('Gagal memuat komentar: ${commentsSnapshot.data!.isEmpty}');
-                    } else if (!commentsSnapshot.hasData) {
+                      // PERBAIKAN: Tampilkan error yang sebenarnya
+                      return Text('Gagal memuat komentar: ${commentsSnapshot.error}');
+                    } else if (!commentsSnapshot.hasData || commentsSnapshot.data!.isEmpty) {
                       return Text('Belum ada komentar');
                     } else {
                       return Column(

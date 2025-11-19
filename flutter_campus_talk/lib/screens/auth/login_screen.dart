@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../services/api_services.dart';
-import '../home/home_screen.dart';
-import 'package:flutter_spinkit/flutter_spinkit.dart';  // Untuk loading indikator yang bagus
-import 'register_screen.dart';
+import '../main_navigation_screen.dart'; // <--- PASTIKAN INI DIIMPOR
+import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'register_screen.dart'; // Import RegisterScreen
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -20,13 +20,13 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Emmail dan password tidak boleh kosong')),
+        SnackBar(content: Text('Email dan password tidak boleh kosong')),
       );
       return;
     }
 
     setState(() {
-    _isLoading = true;
+      _isLoading = true;
     });
 
     try {
@@ -40,7 +40,8 @@ class _LoginScreenState extends State<LoginScreen> {
           SnackBar(content: Text('Selamat datang, ${user.name}!')),
         );
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => HomeScreen()),
+          // PERBAIKAN: Ganti HomeScreen() dengan MainNavigationScreen()
+          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
         );
       }
     } catch (e) {
@@ -67,8 +68,9 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Image.asset('assets/logo.png', height: 100,),  // pastikann logo.png ada
-              const SizedBox(height: 32,),
+              // Pastikan Anda memiliki 'assets/logo.png' atau hapus baris ini
+              // Image.asset('assets/logo.png', height: 100,),
+              // const SizedBox(height: 32,),
               Text(
                 'Selamat Datang di Campus Talk',
                 style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
@@ -80,7 +82,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   labelText: 'Email Kampus',
                   hintText: 'contoh@del.ac.id',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.email),
+                  prefixIcon: const Icon(Icons.email),
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -90,7 +92,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 decoration: InputDecoration(
                   labelText: 'Password',
                   border: OutlineInputBorder(borderRadius:  BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.lock),
+                  prefixIcon: const Icon(Icons.lock),
                 ),
                 obscureText: true,
               ),
@@ -113,7 +115,10 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).pushNamed('/register');
+                  // PERBAIKAN: Ganti pushNamed dengan MaterialPageRoute untuk konsistensi
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const RegisterScreen()),
+                  );
                 },
                 child: const Text('Belum punya akun? Daftar sekarang', style: TextStyle(fontSize: 16)),
               )

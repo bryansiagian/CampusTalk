@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_campus_talk/services/api_services.dart';
-import '../../services/api_services.dart';
-import '../home/home_screen.dart';
+// import 'package:flutter_campus_talk/services/api_services.dart'; // Hapus ini, karena sudah ada yang relatif
+import '../../services/api_services.dart'; // Pertahankan yang ini
+import '../main_navigation_screen.dart'; // <--- PASTIKAN INI DIIMPOR
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 
 class RegisterScreen extends StatefulWidget {
@@ -53,7 +53,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
           SnackBar(content: Text('Registrasi Berhasil! Selamat datang, ${user.name}')),
         );
         Navigator.of(context).pushReplacement(
-          MaterialPageRoute(builder: (context) => HomeScreen()),
+          // PERBAIKAN: Ganti HomeScreen() dengan MainNavigationScreen()
+          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
         );
       }
     } catch (e) {
@@ -90,7 +91,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 decoration: InputDecoration(
                   labelText: 'Nama Lengkap',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.person),
+                  prefixIcon: const Icon(Icons.person),
                 ),
               ),
               const SizedBox(height: 16),
@@ -100,7 +101,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   labelText: 'Email Kampus',
                   hintText: 'contoh@del.ac.id',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.email),
+                  prefixIcon: const Icon(Icons.email),
                 ),
                 keyboardType: TextInputType.emailAddress,
               ),
@@ -110,7 +111,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 decoration: InputDecoration(
                   labelText: 'Password',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.lock),
+                  prefixIcon: const Icon(Icons.lock),
                 ),
                 obscureText: true,
               ),
@@ -120,7 +121,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 decoration: InputDecoration(
                   labelText: 'Konfirmasi Password',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: Icon(Icons.lock_reset),
+                  prefixIcon: const Icon(Icons.lock_reset),
                 ),
                 obscureText: true,
               ),
@@ -143,7 +144,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).pop();
+                  Navigator.of(context).pop(); // Ini akan kembali ke LoginScreen
                 },
                 child: const Text('Sudah punya akun? Login di sini'),
               ),

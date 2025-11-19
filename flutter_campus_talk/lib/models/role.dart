@@ -1,22 +1,23 @@
+// lib/models/role.dart
 class Role {
   final int id;
   final String name;
-  final String createdAt;
-  final String updatedAt;
+  final String? createdAt; // <--- UBAH INI MENJADI NULLABLE
+  final String? updatedAt; // <--- UBAH INI MENJADI NULLABLE
 
   Role({
     required this.id,
     required this.name,
-    required this.createdAt,
-    required this.updatedAt,
+    this.createdAt, // <--- Hapus 'required'
+    this.updatedAt, // <--- Hapus 'required'
   });
 
   factory Role.fromJson(Map<String, dynamic> json) {
     return Role(
-      id: json['id'],
-      name: json['name'],
-      createdAt: json['created_at'],
-      updatedAt: json['updated_at'],
+      id: json['id'] as int,
+      name: json['name'] as String,
+      createdAt: json['created_at'] as String?, // <--- Gunakan 'as String?'
+      updatedAt: json['updated_at'] as String?, // <--- Gunakan 'as String?'
     );
   }
 

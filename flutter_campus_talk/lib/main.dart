@@ -1,45 +1,54 @@
+// lib/main.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'screens/auth/login_screen.dart';
-import 'screens/auth/register_screen.dart';
-import 'screens/home/home_screen.dart';
+import 'screens/auth/login_screen.dart'; // Import LoginScreen
+import 'screens/main_navigation_screen.dart'; // Import MainNavigationScreen yang baru
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  SharedPreferences prefs = await SharedPreferences.getInstance();
-  String? token = prefs.getString('token');
-
-  runApp(MyApp(
-    initialRoute: token != null ? '/home' : '/login',
-  ));
+void main() {
+  runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  final String initialRoute;
-  const MyApp({Key? key, required this.initialRoute}) : super(key: key);
+class MyApp extends StatefulWidget {
+  const MyApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  bool _isLoggedIn = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkLoginStatus();
+  }
+
+  Future<void> _checkLoginStatus() async {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('token');
+    setState(() {
+      _isLoggedIn = token != null;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Campus Talk',
+      title: 'CampusTalk App',
       theme: ThemeData(
         primarySwatch: Colors.blue,
-        visualDensity: VisualDensity.adaptivePlatformDensity,
-        appBarTheme: AppBarTheme(
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.blueAccent, // Warna AppBar
+          foregroundColor: Colors.white, // Warna ikon dan teks di AppBar
+        ),
+        floatingActionButtonTheme: const FloatingActionButtonThemeData(
           backgroundColor: Colors.blueAccent,
           foregroundColor: Colors.white,
         ),
+        // Tambahkan tema lain sesuai kebutuhan
       ),
-      initialRoute: initialRoute,
-      routes: {
-        '/login': (context) => LoginScreen(),
-        '/register': (context) => RegisterScreen(),
-        '/home': (context) => HomeScreen(),
-        // Tambahkan route lain di sini misalnya PostDetailScreen, CreatePostScreen
-      },
-      debugShowCheckedModeBanner: false,
+      home: _isLoggedIn ? const MainNavigationScreen() : const LoginScreen(), // Memulai dari MainNavigationScreen
     );
   }
 }

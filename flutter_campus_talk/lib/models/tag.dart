@@ -1,3 +1,4 @@
+// lib/models/tag.dart
 class Tag {
   final int id;
   final String name;
@@ -6,8 +7,8 @@ class Tag {
 
   factory Tag.fromJson(Map<String, dynamic> json) {
     return Tag(
-      id: json['id'],
-      name: json['name']
+      id: json['id'] as int,
+      name: json['name'] as String
     );
   }
 }

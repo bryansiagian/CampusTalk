@@ -1,30 +1,40 @@
-import '../models/role.dart'; // <--- Import model Role yang baru dibuat
+// lib/models/user.dart
+import '../models/role.dart';
 
 class User {
   final int id;
   final String name;
   final String email;
-  final Role role; // <--- UBAH TIPE DARI String MENJADI Role
+  final Role? role;
   final String? emailVerifiedAt;
-  final String createdAt;
+  final String? createdAt; // <--- UBAH INI MENJADI NULLABLE!
 
   User({
     required this.id,
     required this.name,
     required this.email,
-    required this.role, // <--- UBAH TIPE
+    this.role,
     this.emailVerifiedAt,
-    required this.createdAt,
+    this.createdAt, // <--- Hapus 'required' di sini
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
+    // === Penanganan 'role' ===
+    final dynamic roleJson = json['role'];
+    Role? parsedRole;
+    if (roleJson != null && roleJson is Map<String, dynamic>) {
+      parsedRole = Role.fromJson(roleJson);
+    } else {
+      print('Peringatan: Data Role tidak ada, null, atau bukan Map untuk User ID ${json['id'] ?? 'Unknown'}. Tipe aktual: ${roleJson.runtimeType}');
+    }
+
     return User(
-      id: json['id'],
-      name: json['name'],
-      email: json['email'],
-      role: Role.fromJson(json['role']), // <--- UBAH CARA MEMBACA: Panggil Role.fromJson
-      emailVerifiedAt: json['email_verified_at'],
-      createdAt: json['created_at'],
+      id: json['id'] as int,
+      name: json['name'] as String,
+      email: json['email'] as String,
+      role: parsedRole,
+      emailVerifiedAt: json['email_verified_at'] as String?,
+      createdAt: json['created_at'] as String?, // <--- Gunakan 'as String?' untuk menanganinya sebagai nullable
     );
   }
 
@@ -33,7 +43,7 @@ class User {
       'id': id,
       'name': name,
       'email': email,
-      'role': role.toJson(), // <--- UBAH CARA MENULIS: Panggil role.toJson
+      'role': role?.toJson(),
       'email_verified_at': emailVerifiedAt,
       'created_at': createdAt,
     };

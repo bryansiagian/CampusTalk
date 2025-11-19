@@ -10,16 +10,12 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\AdminController;
+use App\Models\User; // Tambahkan ini
 
 /*
 |--------------------------------------------------------------------------
 | API Routes
 |--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
 */
 
 // Rute Publik (tidak perlu login)
@@ -34,6 +30,24 @@ Route::get('/tags', [TagController::class, 'index']);
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [AuthController::class, 'logout']);
 
+    // --- Rute Baru untuk Profil Pengguna ---
+    // Route untuk mendapatkan informasi user yang sedang login
+    Route::get('/user', function (Request $request) {
+        // Memastikan data role di-load bersama user
+        // Asumsi relasi 'role' (singular) ada di model User
+        // Jika relasi Anda bernama 'roles' (plural), ganti 'role' menjadi 'roles'
+        return $request->user()->load('role');
+    });
+
+    // Route untuk mendapatkan postingan yang dibuat oleh user tertentu
+    // {user} akan otomatis di-resolve ke instance App\Models\User berdasarkan ID
+    Route::get('/users/{user}/posts', function (User $user) {
+        // Memuat relasi author, category, dan tags untuk setiap postingan
+        return response()->json(['data' => $user->posts()->with(['author', 'category', 'tags'])->get()]);
+    });
+    // --- Akhir Rute Baru ---
+
+
     // Postingan
     Route::get('/posts', [PostController::class, 'index']);
     Route::get('/posts/{id}', [PostController::class, 'show']);
@@ -47,12 +61,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Like
     Route::post('/posts/{postId}/likes', [LikeController::class, 'togglePostLike']);
-    Route::delete('/posts/{postId}/likes', [LikeController::class, 'togglePostLike']); // DELETE juga akan memicu toggle
+    Route::delete('/posts/{postId}/likes', [LikeController::class, 'togglePostLike']);
 
     // Notifikasi
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
-    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']); // Opsional: Tandai semua dibaca
+    Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
     // Admin (menggunakan AdminController dengan middleware isAdmin)
     Route::get('/admin/dashboard-stats', [AdminController::class, 'dashboardStats']);

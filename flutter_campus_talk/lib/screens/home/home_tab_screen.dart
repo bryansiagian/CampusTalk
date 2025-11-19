@@ -1,20 +1,19 @@
+// lib/screens/home/home_tab_screen.dart
 import 'package:flutter/material.dart';
-import '../../services/api_services.dart';
-import '../../models/post.dart';
-import '../auth/login_screen.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import '../../models/post.dart';
+import '../../services/api_services.dart';
+import '../post/create_post_screen.dart';
 import '../post/post_detail_screen.dart';
-import '../post/create_post_screen.dart'; // Akan dibuat nanti
-import '../notification/notification_screen.dart'; // Akan dibuat nanti
 
-class HomeScreen extends StatefulWidget {
-  const HomeScreen({Key? key}) : super(key: key);
+class HomeTabScreen extends StatefulWidget {
+  const HomeTabScreen({Key? key}) : super(key: key);
 
   @override
-  _HomeScreenState createState() => _HomeScreenState();
+  _HomeTabScreenState createState() => _HomeTabScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeTabScreenState extends State<HomeTabScreen> {
   final ApiServices _apiServices = ApiServices();
   late Future<List<Post>> _postsFuture;
 
@@ -30,48 +29,13 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  Future<void> _logout() async {
-    try {
-      await _apiServices.logout();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Anda telah logout.')),
-      );
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('CampusTalk', style: TextStyle(color: Colors.white)),
-        centerTitle: true,
-        actions: [
-          IconButton(
-            icon: Icon(Icons.notifications, color: Colors.white),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(builder: (context) => NotificationScreen()), // Anda perlu membuat NotificationScreen
-              ).then((_) => _refreshPosts()); // Refresh saat kembali
-            },
-          ),
-          IconButton(
-            icon: Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () async {
           final result = await Navigator.of(context).push(
-            MaterialPageRoute(builder: (context) => CreatePostScreen()), // Anda perlu membuat CreatePostScreen
+            MaterialPageRoute(builder: (context) => CreatePostScreen()),
           );
           if (result == true) {
             _refreshPosts();
@@ -115,7 +79,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (context) => PostDetailScreen(postId: post.id), // Anda perlu membuat PostDetailScreen
+                            builder: (context) => PostDetailScreen(postId: post.id),
                           ),
                         ).then((_) => _refreshPosts());
                       },
