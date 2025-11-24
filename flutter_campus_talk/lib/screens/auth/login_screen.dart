@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
-import '../../services/api_services.dart';
-import '../main_navigation_screen.dart'; // <--- PASTIKAN INI DIIMPOR
 import 'package:flutter_spinkit/flutter_spinkit.dart';
-import 'register_screen.dart'; // Import RegisterScreen
+import '../../services/api_services.dart';
+
+// Import Screen Tujuan
+import '../main_navigation_screen.dart'; // Untuk User Biasa
+import '../admin/admin_dashboard_screen.dart'; // <--- UNTUK ADMIN (Pastikan path sesuai)
+import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({Key? key}) : super(key: key);
@@ -20,7 +23,7 @@ class _LoginScreenState extends State<LoginScreen> {
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Email dan password tidak boleh kosong')),
+        const SnackBar(content: Text('Email dan password tidak boleh kosong')),
       );
       return;
     }
@@ -30,33 +33,48 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      // 1. Panggil API Login
       final user = await _apiService.login(
         _emailController.text,
         _passwordController.text,
       );
 
-      if(user != null) {
+      if (user != null) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Selamat datang, ${user.name}!')),
         );
-        Navigator.of(context).pushReplacement(
-          // PERBAIKAN: Ganti HomeScreen() dengan MainNavigationScreen()
-          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-        );
+
+        // ============================================================
+        // LOGIKA BARU: CEK ROLE USER
+        // ============================================================
+        if (user.isAdmin) {
+          // JIKA ADMIN -> Buka Dashboard Admin yang beda tampilan
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const AdminDashboardScreen()),
+          );
+        } else {
+          // JIKA USER BIASA -> Buka Main Navigation (Home Tab User)
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
+          );
+        }
+        // ============================================================
       }
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString().replaceFirst('Exception:', ''))),
       );
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
   }
 
   @override
-  Widget build(BuildContext context)  {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Login CampusTalk', style: TextStyle(color: Colors.white)),
@@ -68,7 +86,6 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Pastikan Anda memiliki 'assets/logo.png' atau hapus baris ini
               // Image.asset('assets/logo.png', height: 100,),
               // const SizedBox(height: 32,),
               Text(
@@ -91,31 +108,30 @@ class _LoginScreenState extends State<LoginScreen> {
                 controller: _passwordController,
                 decoration: InputDecoration(
                   labelText: 'Password',
-                  border: OutlineInputBorder(borderRadius:  BorderRadius.circular(12)),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                   prefixIcon: const Icon(Icons.lock),
                 ),
                 obscureText: true,
               ),
               const SizedBox(height: 32),
               _isLoading
-                ? SpinKitWave(color: Theme.of(context).primaryColor, size: 30.0)
+                  ? SpinKitWave(color: Theme.of(context).primaryColor, size: 30.0)
                   : SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _login,
-                      style: ElevatedButton.styleFrom(
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        backgroundColor: Theme.of(context).primaryColor,
-                        foregroundColor: Colors.white,
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton(
+                        onPressed: _login,
+                        style: ElevatedButton.styleFrom(
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          backgroundColor: Theme.of(context).primaryColor,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Login', style: TextStyle(fontSize: 18)),
                       ),
-                      child: const Text('Login', style: TextStyle(fontSize: 18)),
                     ),
-                  ),
               const SizedBox(height: 16),
               TextButton(
                 onPressed: () {
-                  // PERBAIKAN: Ganti pushNamed dengan MaterialPageRoute untuk konsistensi
                   Navigator.of(context).push(
                     MaterialPageRoute(builder: (context) => const RegisterScreen()),
                   );

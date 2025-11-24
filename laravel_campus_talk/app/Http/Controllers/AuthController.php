@@ -16,28 +16,30 @@ class AuthController extends Controller
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
             'password' => 'required|string|min:8|confirmed',
+            // Validasi Wajib untuk Mahasiswa
+            'nim' => 'required|string|max:20|unique:users',
+            'prodi' => 'required|string|max:100',
+            'angkatan' => 'required|integer|digits:4',
         ]);
 
-        // Dapatkan role 'user'
-        $userRole = Role::where('name', 'user')->first();
-        if (!$userRole) {
-            return response()->json(['message' => 'User role not found'], 500);
-        }
+        $userRole = \App\Models\Role::where('name', 'user')->first();
 
-        $user = User::create([
+        $user = \App\Models\User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
-            'role_id' => $userRole->id, // Set role_id secara otomatis ke 'user'
+            'password' => \Illuminate\Support\Facades\Hash::make($request->password),
+            'role_id' => $userRole->id,
+            'is_approved' => false,
+            // Simpan Data Baru
+            'nim' => $request->nim,
+            'prodi' => $request->prodi,
+            'angkatan' => $request->angkatan,
         ]);
 
-        $token = $user->createToken('auth_token')->plainTextToken;
-
         return response()->json([
-            'message' => 'Registrasi berhasil!',
-            'user' => $user->load('role'), // Load relasi role
-            'token' => $token,
-        ], 201); // 201 Created
+            'message' => 'Registrasi berhasil! Mohon tunggu persetujuan Admin.',
+            'user' => $user,
+        ], 201);
     }
 
     public function login(Request $request)
@@ -51,8 +53,15 @@ class AuthController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             throw ValidationException::withMessages([
-                'email' => ['Kredensial yang diberikan tidak cocok dengan catatan kami.'],
+                'email' => ['Email atau password salah.'],
             ]);
+        }
+
+        // PERUBAHAN: Cek Status Approval
+        if (!$user->is_approved) {
+             return response()->json([
+                 'message' => 'Akun Anda belum disetujui oleh Admin. Silakan hubungi administrator.'
+             ], 403); // 403 Forbidden
         }
 
         // Hapus semua token lama user ini

@@ -11,4 +11,12 @@ class Category {
       name: json['name'] as String,
     );
   }
+
+  // --- TAMBAHKAN METODE toJson() INI ---
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+    };
+  }
 }

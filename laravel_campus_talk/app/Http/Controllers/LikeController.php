@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Models\Like;
 use App\Models\Post;
+// Hapus import Notification karena sudah tidak dipakai manual
 use Illuminate\Http\Request;
-use Illuminate\Validation\ValidationException;
 
 class LikeController extends Controller
 {
@@ -24,19 +24,20 @@ class LikeController extends Controller
                     ->first();
 
         if ($like) {
-            // Sudah like, hapus like-nya (unlike)
+            // --- UNLIKE ---
+            // Cukup delete saja. Trigger 'trigger_remove_notify_like' akan otomatis jalan.
             $like->delete();
+
             return response()->json(['message' => 'Unlike berhasil!', 'liked' => false]);
         } else {
-            // Belum like, tambahkan like
+            // --- LIKE ---
+            // Cukup create saja. Trigger Insert (sebelumnya) akan otomatis jalan.
             Like::create([
                 'user_id' => $userId,
                 'post_id' => $postId,
             ]);
+
             return response()->json(['message' => 'Like berhasil!', 'liked' => true], 201);
         }
     }
-
-    // Anda bisa membuat fungsi toggleLike untuk komentar juga jika diinginkan
-    // public function toggleCommentLike($commentId) { ... }
 }

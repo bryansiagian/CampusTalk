@@ -16,6 +16,7 @@ class Notification extends Model
         'source_type',
         'message',
         'is_read',
+        'sender_id',
     ];
 
     protected $casts = [
@@ -26,5 +27,17 @@ class Notification extends Model
     public function user()
     {
         return $this->belongsTo(User::class);
+    }
+
+     // Relasi: Pengguna yang memicu notifikasi
+    public function sender() // <--- TAMBAHKAN INI
+    {
+        return $this->belongsTo(User::class, 'sender_id');
+    }
+
+    // Relasi Polimorfik: Sumber notifikasi (bisa Post atau Comment)
+    public function source() // <--- TAMBAHKAN INI
+    {
+        return $this->morphTo();
     }
 }

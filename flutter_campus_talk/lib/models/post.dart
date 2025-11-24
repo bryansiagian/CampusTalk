@@ -9,10 +9,12 @@ class Post {
   final Category category;
   final String title;
   final String content;
-  final int totalLikes;
+  final int totalLikes; // Ini akan berasal dari 'likes_count' (Eloquent)
   final int totalComments;
   final String createdAt;
   final List<Tag>? tags;
+  final bool isLikedByCurrentUser;
+  final int totalLikesViaFunction; // <--- PROPERTI BARU UNTUK FUNGSI DB
 
   Post({
     required this.id,
@@ -24,49 +26,70 @@ class Post {
     this.totalComments = 0,
     required this.createdAt,
     this.tags,
+    this.isLikedByCurrentUser = false,
+    this.totalLikesViaFunction = 0, // <--- DEFAULT VALUE UNTUK PROPERTI BARU
   });
 
   factory Post.fromJson(Map<String, dynamic> json) {
-    // --- Penanganan 'author' ---
     final dynamic authorJson = json['author'];
     if (authorJson == null || authorJson is! Map<String, dynamic>) {
-      throw Exception('Data Author tidak ada atau null untuk Post ID ${json['id'] ?? 'Unknown'}. Tipe aktual: ${authorJson.runtimeType}');
+      // Lebih spesifik jika json['id'] tidak ada
+      final postIdForError = (json['id'] is String) ? json['id'] : (json['id']?.toString() ?? 'Unknown');
+      throw Exception('Data Author tidak ada atau null untuk Post ID $postIdForError');
     }
     final User parsedAuthor = User.fromJson(authorJson);
 
-    // --- Penanganan 'category' ---
     final dynamic categoryJson = json['category'];
     if (categoryJson == null || categoryJson is! Map<String, dynamic>) {
-      throw Exception('Data Kategori tidak ada atau null untuk Post ID ${json['id'] ?? 'Unknown'}. Tipe aktual: ${categoryJson.runtimeType}');
+      final postIdForError = (json['id'] is String) ? json['id'] : (json['id']?.toString() ?? 'Unknown');
+      throw Exception('Data Kategori tidak ada atau null untuk Post ID $postIdForError');
     }
     final Category parsedCategory = Category.fromJson(categoryJson);
 
-    // --- Penanganan 'tags' ---
     final List<dynamic>? tagsJsonList = json['tags'] as List<dynamic>?;
     final List<Tag>? parsedTags = tagsJsonList
         ?.map((tagJson) {
           if (tagJson == null || tagJson is! Map<String, dynamic>) {
             print('Peringatan: Tag individual bukan objek JSON (Map) atau null. Tipe aktual: ${tagJson.runtimeType}');
-            return null;
+            return null; // Return null agar bisa di-filter
           }
           return Tag.fromJson(tagJson);
         })
-        .where((tag) => tag != null)
+        .where((tag) => tag != null) // Filter tag yang null
         .cast<Tag>()
         .toList();
 
     return Post(
-      // PERBAIKAN PENTING: Tangani 'id' jika dikirim sebagai String atau int
       id: (json['id'] is String) ? int.parse(json['id']) : json['id'] as int,
       author: parsedAuthor,
       category: parsedCategory,
       title: json['title'] as String,
       content: json['content'] as String,
-      // totalLikes dan totalComments sudah cukup baik dengan 'as int? ?? 0'
-      totalLikes: json['likes_count'] as int? ?? 0,
+      totalLikes: json['likes_count'] as int? ?? 0, // Dari withCount('likes')
       totalComments: json['comments_count'] as int? ?? 0,
       createdAt: json['created_at'] as String,
       tags: parsedTags,
+      isLikedByCurrentUser: json['is_liked_by_current_user'] as bool? ?? false,
+      totalLikesViaFunction: json['total_likes_via_function'] as int? ?? 0, // <--- PARSE PROPERTI BARU
     );
+  }
+
+  // --- Metode toJson() Anda (perlu disesuaikan jika ingin menggunakannya untuk mengirim data POST) ---
+  // Perhatikan bahwa `toJson()` ini biasanya untuk mengirim data ke API,
+  // dan mungkin tidak selalu memerlukan semua properti yang berasal dari JOIN/AGGREGATE.
+  // Untuk keperluan API Anda, mungkin Anda hanya perlu mengirim `title`, `content`, `category_id`, `tags`.
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'author': author.toJson(),
+      'category': category.toJson(),
+      'title': title,
+      'content': content,
+      // 'likes_count': totalLikes, // Ini biasanya tidak dikirim, tapi diterima
+      // 'comments_count': totalComments, // Ini biasanya tidak dikirim, tapi diterima
+      'created_at': createdAt, // ini biasanya tidak dikirim, tapi diterima
+      'tags': tags?.map((tag) => tag.toJson()).toList(),
+      // `isLikedByCurrentUser` dan `totalLikesViaFunction` juga biasanya tidak dikirim
+    };
   }
 }

@@ -1,49 +1,16 @@
 <?php
-
 namespace App\Models;
-
-use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Report extends Model
-{
-    use HasFactory;
+class Report extends Model {
+    protected $fillable = ['user_id', 'reason', 'status', 'reportable_id', 'reportable_type'];
 
-    protected $fillable = [
-        'reporter_id',
-        'reported_post_id',
-        'reported_comment_id',
-        'reason',
-        'status',
-        'resolved_at',
-        'resolved_by',
-    ];
-
-    protected $casts = [
-        'resolved_at' => 'datetime',
-    ];
-
-    // Relasi: Laporan dibuat oleh satu User
-    public function reporter()
-    {
-        return $this->belongsTo(User::class, 'reporter_id');
+    // Relasi Polymorphic (Bisa Post atau Comment)
+    public function reportable() {
+        return $this->morphTo();
     }
 
-    // Relasi: Laporan bisa menarget satu Post
-    public function reportedPost()
-    {
-        return $this->belongsTo(Post::class, 'reported_post_id');
-    }
-
-    // Relasi: Laporan bisa menarget satu Comment
-    public function reportedComment()
-    {
-        return $this->belongsTo(Comment::class, 'reported_comment_id');
-    }
-
-    // Relasi: Laporan diselesaikan oleh satu User (admin)
-    public function resolver()
-    {
-        return $this->belongsTo(User::class, 'resolved_by');
+    public function reporter() {
+        return $this->belongsTo(User::class, 'user_id');
     }
 }

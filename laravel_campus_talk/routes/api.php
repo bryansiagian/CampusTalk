@@ -10,6 +10,10 @@ use App\Http\Controllers\CategoryController;
 use App\Http\Controllers\TagController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\AdminController;
+use App\Http\Controllers\CommentLikeController;
+use App\Http\Controllers\ReportController;
+
+
 use App\Models\User; // Tambahkan ini
 
 /*
@@ -33,9 +37,6 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Rute Baru untuk Profil Pengguna ---
     // Route untuk mendapatkan informasi user yang sedang login
     Route::get('/user', function (Request $request) {
-        // Memastikan data role di-load bersama user
-        // Asumsi relasi 'role' (singular) ada di model User
-        // Jika relasi Anda bernama 'roles' (plural), ganti 'role' menjadi 'roles'
         return $request->user()->load('role');
     });
 
@@ -58,16 +59,26 @@ Route::middleware('auth:sanctum')->group(function () {
     // Komentar
     Route::get('/posts/{postId}/comments', [CommentController::class, 'index']);
     Route::post('/posts/{postId}/comments', [CommentController::class, 'store']);
+    Route::delete('/comments/{id}', [CommentController::class, 'destroy']);
+    Route::get('/comments/details', [CommentController::class, 'getCommentDetails']);
 
     // Like
     Route::post('/posts/{postId}/likes', [LikeController::class, 'togglePostLike']);
     Route::delete('/posts/{postId}/likes', [LikeController::class, 'togglePostLike']);
+    Route::post('/comments/{id}/like', [CommentLikeController::class, 'toggle']);
+    Route::post('/reports', [ReportController::class, 'store']);
 
     // Notifikasi
     Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'getUnreadNotificationCount']); // <--- FUNGSI BARU DI CONTROLLER
     Route::put('/notifications/{id}/read', [NotificationController::class, 'markAsRead']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllAsRead']);
 
     // Admin (menggunakan AdminController dengan middleware isAdmin)
     Route::get('/admin/dashboard-stats', [AdminController::class, 'dashboardStats']);
+    Route::get('/admin/pending-users', [AdminController::class, 'getPendingUsers']);
+    Route::put('/admin/users/{id}/approve', [AdminController::class, 'approveUser']);
+    Route::delete('/admin/users/{id}/reject', [AdminController::class, 'rejectUser']);
+    Route::get('/admin/reports', [AdminController::class, 'getReports']);
+    Route::delete('/admin/reports/{id}', [AdminController::class, 'dismissReport']);
 });

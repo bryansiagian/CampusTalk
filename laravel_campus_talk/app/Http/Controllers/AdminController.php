@@ -58,6 +58,59 @@ class AdminController extends Controller
         ]);
     }
 
+    public function getPendingUsers()
+    {
+        // Ambil user dengan role 'user' DAN is_approved = false
+        $pendingUsers = User::where('is_approved', false)
+                            ->whereHas('role', function($q) {
+                                $q->where('name', 'user');
+                            })
+                            ->orderBy('created_at', 'desc')
+                            ->get();
+
+        return response()->json(['data' => $pendingUsers]);
+    }
+
+    // Setujui User
+    public function approveUser($id)
+    {
+        $user = User::find($id);
+        if (!$user) return response()->json(['message' => 'User tidak ditemukan'], 404);
+
+        $user->update(['is_approved' => true]);
+
+        return response()->json(['message' => 'User berhasil disetujui!']);
+    }
+
+    // Tolak User (Hapus)
+    public function rejectUser($id)
+    {
+        $user = User::find($id);
+        if (!$user) return response()->json(['message' => 'User tidak ditemukan'], 404);
+
+        $user->delete();
+
+        return response()->json(['message' => 'User ditolak dan dihapus.']);
+    }
+
+    public function getReports()
+    {
+        // Ambil laporan beserta data pelapor dan konten yang dilaporin
+        $reports = \App\Models\Report::with(['reporter', 'reportable'])
+                    ->where('status', 'pending')
+                    ->orderBy('created_at', 'desc')
+                    ->get();
+
+        return response()->json(['data' => $reports]);
+    }
+
+    // Fungsi untuk menghapus laporan (Dismiss)
+    public function dismissReport($id) {
+        $report = \App\Models\Report::find($id);
+        if ($report) $report->delete();
+        return response()->json(['message' => 'Laporan dihapus']);
+    }
+
     // Anda bisa menambahkan fungsi-fungsi admin lain di sini, misal:
     // public function manageUsers() { ... }
     // public function manageReports() { ... }

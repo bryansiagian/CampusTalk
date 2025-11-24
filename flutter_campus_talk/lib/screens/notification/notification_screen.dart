@@ -1,8 +1,9 @@
 // lib/screens/notification/notification_screen.dart
 import 'package:flutter/material.dart';
-import '../../services/api_services.dart';
-import '../../models/notification.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import '../../models/notification.dart'; // Import AppNotification
+import '../../services/api_services.dart';
+import '../post/post_detail_screen.dart';
 
 class NotificationScreen extends StatefulWidget {
   const NotificationScreen({Key? key}) : super(key: key);
@@ -18,10 +19,10 @@ class _NotificationScreenState extends State<NotificationScreen> {
   @override
   void initState() {
     super.initState();
-    _notificationsFuture = _apiServices.getNotifications();
+    _fetchNotifications();
   }
 
-  Future<void> _refreshNotifications() async {
+  void _fetchNotifications() {
     setState(() {
       _notificationsFuture = _apiServices.getNotifications();
     });
@@ -29,27 +30,41 @@ class _NotificationScreenState extends State<NotificationScreen> {
 
   Future<void> _markAsRead(int notificationId) async {
     try {
-      bool success = await _apiServices.markNotificationAsRead(notificationId);
-      if (success) {
-        _refreshNotifications(); // Refresh daftar setelah menandai dibaca
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal menandai notifikasi sudah dibaca.')));
-      }
+      await _apiServices.markNotificationAsRead(notificationId);
+      _fetchNotifications(); // Refresh list
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menandai notifikasi sebagai dibaca: ${e.toString()}'))
+      );
+    }
+  }
+
+  Future<void> _markAllAsRead() async {
+    try {
+      await _apiServices.markAllNotificationsAsRead();
+      _fetchNotifications(); // Refresh list
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Gagal menandai semua notifikasi sebagai dibaca: ${e.toString()}'))
+      );
     }
   }
 
   @override
-  Widget build(BuildContext
-      context) {
+  Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Notifikasi Saya', style: TextStyle(color: Colors.white)),
+        title: const Text('Notifikasi', style: TextStyle(color: Colors.white)),
         centerTitle: true,
+        actions: [
+          TextButton(
+            onPressed: _markAllAsRead,
+            child: const Text('Baca Semua', style: TextStyle(color: Colors.white)),
+          ),
+        ],
       ),
       body: RefreshIndicator(
-        onRefresh: _refreshNotifications,
+        onRefresh: () async => _fetchNotifications(),
         child: FutureBuilder<List<AppNotification>>(
           future: _notificationsFuture,
           builder: (context, snapshot) {
@@ -65,35 +80,47 @@ class _NotificationScreenState extends State<NotificationScreen> {
                 itemBuilder: (context, index) {
                   final notification = snapshot.data![index];
                   return Card(
+                    color: notification.isRead ? Colors.white : Colors.blue.shade50,
                     margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                     elevation: 2,
-                    color: notification.isRead ? Colors.grey.shade100 : Colors.blue.shade50,
-                    child: ListTile(
-                      leading: Icon(
-                        notification.type == 'comment_on_post' ? Icons.comment : Icons.thumb_up,
-                        color: notification.isRead ? Colors.grey : Theme.of(context).primaryColor,
-                      ),
-                      title: Text(
-                        notification.message,
-                        style: TextStyle(
-                          fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    child: InkWell(
+                      onTap: () async {
+                        if (!notification.isRead) {
+                          await _markAsRead(notification.id);
+                        }
+                        if (notification.relatedPost != null) {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (context) => PostDetailScreen(postId: notification.relatedPost!.id),
+                            ),
+                          ).then((_) => _fetchNotifications()); // Refresh saat kembali
+                        } else {
+                          // Jika notifikasi tidak terkait dengan postingan, mungkin tampilkan pesan
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(notification.message))
+                          );
+                        }
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              notification.message,
+                              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                                fontWeight: notification.isRead ? FontWeight.normal : FontWeight.bold,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              notification.createdAt, // Anda bisa memformat ini lebih baik
+                              style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.grey),
+                            ),
+                          ],
                         ),
                       ),
-                      subtitle: Text(
-                        '${DateTime.parse(notification.createdAt).day}/${DateTime.parse(notification.createdAt).month}/${DateTime.parse(notification.createdAt).year} - '
-                        '${DateTime.parse(notification.createdAt).hour}:${DateTime.parse(notification.createdAt).minute}',
-                        style: TextStyle(color: Colors.grey),
-                      ),
-                      trailing: notification.isRead
-                          ? null // Tidak ada ikon jika sudah dibaca
-                          : Icon(Icons.mark_email_unread, color: Colors.blueGrey),
-                      onTap: () {
-                        if (!notification.isRead) {
-                          _markAsRead(notification.id);
-                        }
-                        // TODO: Arahkan ke detail postingan/komentar yang relevan
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Notifikasi #${notification.id} diklik! (Redirect belum diimplementasi)')));
-                      },
                     ),
                   );
                 },

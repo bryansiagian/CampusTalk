@@ -1,8 +1,7 @@
+// lib/screens/auth/register_screen.dart
 import 'package:flutter/material.dart';
-// import 'package:flutter_campus_talk/services/api_services.dart'; // Hapus ini, karena sudah ada yang relatif
-import '../../services/api_services.dart'; // Pertahankan yang ini
-import '../main_navigation_screen.dart'; // <--- PASTIKAN INI DIIMPOR
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import '../../services/api_services.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -12,26 +11,37 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
+  // Definisi Controller
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  final _passwordConfirmationController = TextEditingController();
-  final ApiServices _apiServices = ApiServices();
+  final _confirmPasswordController = TextEditingController(); // <--- INI YANG TADINYA HILANG
+  final _nimController = TextEditingController();
+  final _prodiController = TextEditingController();
+  final _angkatanController = TextEditingController();
+
+  final ApiServices _apiService = ApiServices();
   bool _isLoading = false;
 
   Future<void> _register() async {
+    // 1. Validasi Input Kosong
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
+        _nimController.text.isEmpty ||     
+        _prodiController.text.isEmpty ||   
+        _angkatanController.text.isEmpty ||
         _passwordController.text.isEmpty ||
-        _passwordConfirmationController.text.isEmpty) {
+        _confirmPasswordController.text.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Semua kolom harus diisi.')),
+        const SnackBar(content: Text('Semua kolom harus diisi')),
       );
       return;
     }
-    if (_passwordController.text != _passwordConfirmationController.text) {
+
+    // 2. Validasi Password Match
+    if (_passwordController.text != _confirmPasswordController.text) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Konfirmasi password tidak cocok.')),
+        const SnackBar(content: Text('Password dan Konfirmasi Password tidak sama')),
       );
       return;
     }
@@ -41,38 +51,72 @@ class _RegisterScreenState extends State<RegisterScreen> {
     });
 
     try {
-      final user = await _apiServices.register(
+      // 3. Panggil API Register
+      bool success = await _apiService.register(
         _nameController.text,
         _emailController.text,
         _passwordController.text,
-        _passwordConfirmationController.text,
+        _confirmPasswordController.text, // <--- Sekarang variabel ini sudah ada
+        _nimController.text,       
+        _prodiController.text,     
+        _angkatanController.text,
       );
 
-      if (user != null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Registrasi Berhasil! Selamat datang, ${user.name}')),
-        );
-        Navigator.of(context).pushReplacement(
-          // PERBAIKAN: Ganti HomeScreen() dengan MainNavigationScreen()
-          MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-        );
+      if (success) {
+        if (mounted) {
+          // 4. Tampilkan Dialog Sukses & Info Approval
+          await showDialog(
+            context: context,
+            barrierDismissible: false, // User harus klik OK
+            builder: (context) => AlertDialog(
+              title: const Text('Registrasi Berhasil'),
+              content: const Text(
+                'Akun Anda telah dibuat.\n\n'
+                'Demi keamanan, akun Anda berstatus "Pending".\n'
+                'Mohon tunggu persetujuan dari Admin sebelum Anda dapat Login.',
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () {
+                    Navigator.pop(context); // Tutup Dialog
+                    Navigator.pop(context); // Kembali ke Login Screen
+                  },
+                  child: const Text('OK, Saya Mengerti'),
+                ),
+              ],
+            ),
+          );
+        }
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(e.toString().replaceFirst('Exception: ', ''))),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.toString().replaceFirst('Exception:', ''))),
+        );
+      }
     } finally {
-      setState(() {
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Registrasi CampusTalk', style: TextStyle(color: Colors.white)),
+        title: const Text('Daftar Akun Baru'),
         centerTitle: true,
       ),
       body: Center(
@@ -81,11 +125,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Text(
-                'Daftar Akun Baru',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+              const Text(
+                'Buat Akun',
+                style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 24),
+              
+              // Input Nama
               TextField(
                 controller: _nameController,
                 decoration: InputDecoration(
@@ -95,6 +141,45 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 ),
               ),
               const SizedBox(height: 16),
+
+              // Input NIM
+              TextField(
+                controller: _nimController,
+                decoration: InputDecoration(
+                  labelText: 'NIM',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.badge),
+                ),
+                keyboardType: TextInputType.number, // Keyboard angka
+              ),
+              const SizedBox(height: 16),
+
+              // Input Prodi
+              TextField(
+                controller: _prodiController,
+                decoration: InputDecoration(
+                  labelText: 'Program Studi',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.school),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              // Input Angkatan
+              TextField(
+                controller: _angkatanController,
+                decoration: InputDecoration(
+                  labelText: 'Angkatan (Tahun)',
+                  hintText: 'Contoh: 2023',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  prefixIcon: const Icon(Icons.calendar_today),
+                ),
+                keyboardType: TextInputType.number, // Keyboard angka
+                maxLength: 4, // Batasi 4 digit
+              ),
+              // const SizedBox(height: 16) - tidak perlu karena TextField maxLength ada padding bawahnya
+              
+              // Input Email
               TextField(
                 controller: _emailController,
                 decoration: InputDecoration(
@@ -106,6 +191,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
+              
+              // Input Password
               TextField(
                 controller: _passwordController,
                 decoration: InputDecoration(
@@ -116,18 +203,22 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 obscureText: true,
               ),
               const SizedBox(height: 16),
+              
+              // Input Konfirmasi Password
               TextField(
-                controller: _passwordConfirmationController,
+                controller: _confirmPasswordController,
                 decoration: InputDecoration(
                   labelText: 'Konfirmasi Password',
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                  prefixIcon: const Icon(Icons.lock_reset),
+                  prefixIcon: const Icon(Icons.lock_outline),
                 ),
                 obscureText: true,
               ),
               const SizedBox(height: 32),
+              
+              // Tombol Daftar
               _isLoading
-                  ? SpinKitWave(color: Theme.of(context).primaryColor, size: 30.0)
+                  ? SpinKitThreeBounce(color: Theme.of(context).primaryColor, size: 30.0)
                   : SizedBox(
                       width: double.infinity,
                       height: 50,
@@ -141,13 +232,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         child: const Text('Daftar', style: TextStyle(fontSize: 18)),
                       ),
                     ),
-              const SizedBox(height: 16),
-              TextButton(
-                onPressed: () {
-                  Navigator.of(context).pop(); // Ini akan kembali ke LoginScreen
-                },
-                child: const Text('Sudah punya akun? Login di sini'),
-              ),
             ],
           ),
         ),

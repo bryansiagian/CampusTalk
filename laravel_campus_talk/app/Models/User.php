@@ -16,6 +16,10 @@ class User extends Authenticatable
         'name',
         'email',
         'password',
+        'is_approved',
+        'nim',
+        'prodi',     
+        'angkatan',
     ];
 
     protected $hidden = [
@@ -51,10 +55,10 @@ class User extends Authenticatable
         return $this->hasMany(Like::class);
     }
 
-    // Relasi: User memiliki banyak Notifikasi (sebagai penerima)
-    public function notifications()
+    // Relasi: User menerima banyak notifikasi
+    public function notifications() // <--- TAMBAHKAN INI
     {
-        return $this->hasMany(AppNotification::class); // Ganti AppNotification jika nama modelnya Notification
+        return $this->hasMany(Notification::class);
     }
 
     // Cek apakah user adalah admin

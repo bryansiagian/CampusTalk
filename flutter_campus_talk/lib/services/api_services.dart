@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
+import '../models/comment_detail.dart';
 import '../models/category.dart';
 import '../models/notification.dart';
 import '../models/tag.dart';
@@ -51,7 +52,7 @@ class ApiServices {
     }
   }
 
-  Future<User?> register(String name, String email, String password, String passwordConfirmation) async {
+  Future<bool> register(String name, String email, String password, String passwordConfirmation, String nim, String prodi, String angkatan) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/register'),
       headers: await _getHeaders(requireAuth: false),
@@ -60,31 +61,65 @@ class ApiServices {
         'email': email,
         'password': password,
         'password_confirmation': passwordConfirmation,
+        'nim': nim,
+        'prodi': prodi,
+        'angkatan': angkatan,
       }),
     );
 
     if (response.statusCode == 201) {
-      final data = jsonDecode(response.body);
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.setString('token', data['token']);
-      return User.fromJson(data['user'] as Map<String, dynamic>); // Tambahkan cast
+      return true; // Sukses, tapi belum login
     } else {
-      print('Registrasi Gagal: ${response.statusCode} - ${response.body}');
-      throw Exception('Registrasi gagal. Coba lagi.');
+      print('Registrasi Gagal: ${response.body}');
+      final body = jsonDecode(response.body);
+      throw Exception(jsonDecode(response.body)['message'] ?? 'Registrasi gagal.');
     }
   }
 
-  Future<void> logout() async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/logout'),
-      headers: await _getHeaders(),
-    );
+  // --- ADMIN USER MANAGEMENT ---
+  Future<List<User>> getPendingUsers() async {
+    final response = await http.get(Uri.parse('$_baseUrl/admin/pending-users'), headers: await _getHeaders());
     if (response.statusCode == 200) {
+      final List data = jsonDecode(response.body)['data'];
+      return data.map((e) => User.fromJson(e)).toList();
+    }
+    return [];
+  }
+
+  Future<bool> approveUser(int userId) async {
+    final response = await http.put(Uri.parse('$_baseUrl/admin/users/$userId/approve'), headers: await _getHeaders());
+    return response.statusCode == 200;
+  }
+
+  Future<bool> rejectUser(int userId) async {
+    final response = await http.delete(Uri.parse('$_baseUrl/admin/users/$userId/reject'), headers: await _getHeaders());
+    return response.statusCode == 200;
+  }
+
+  Future<void> logout() async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_baseUrl/logout'),
+        headers: await _getHeaders(),
+      );
+
+      // Logika Baru:
+      // Sukses (200) ATAU Unauthenticated (401) dianggap berhasil logout secara lokal
+      if (response.statusCode == 200 || response.statusCode == 401) {
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.remove('token'); // Hapus token lokal
+      } else {
+        // Error lain (misal 500 Server Error)
+        print('Logout Gagal di Server: ${response.statusCode} - ${response.body}');
+        // Tetap hapus token lokal agar user tidak terjebak
+        SharedPreferences prefs = await SharedPreferences.getInstance();
+        await prefs.remove('token');
+      }
+    } catch (e) {
+      // Jika koneksi internet mati, tetap hapus token lokal
+      print("Error koneksi saat logout: $e");
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.remove('token');
-    } else {
-      print('Logout Gagal: ${response.statusCode} - ${response.body}');
-      throw Exception('Logout gagal. Coba lagi.');
     }
   }
 
@@ -118,11 +153,13 @@ class ApiServices {
     String? sortBy,
     int? categoryId,
     String? search,
+    String? tagSearch,
   }) async {
     Map<String, String> queryParams = {};
     if (sortBy != null) queryParams['sort_by'] = sortBy;
     if (categoryId != null) queryParams['category_id'] = categoryId.toString();
     if (search != null) queryParams['search'] = search;
+    if (tagSearch != null && tagSearch.isNotEmpty) queryParams['tag'] = tagSearch;
 
     Uri uri = Uri.parse('$_baseUrl/posts').replace(queryParameters: queryParams);
 
@@ -210,7 +247,7 @@ class ApiServices {
     }
   }
 
-  Future<Post?> createPost(String title, String content, int categoryId, List<int> tagIds) async {
+  Future<Post?> createPost(String title, String content, int categoryId, String tags) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/posts'),
       headers: await _getHeaders(),
@@ -218,7 +255,7 @@ class ApiServices {
         'title': title,
         'content': content,
         'category_id': categoryId,
-        'tags': tagIds,
+        'tags': tags,
       }),
     );
 
@@ -231,6 +268,26 @@ class ApiServices {
     } else {
       print('Gagal membuat postingan: ${response.statusCode} - ${response.body}');
       throw Exception('Gagal membuat postingan.');
+    }
+  }
+
+  Future<bool> updatePost(int postId, String title, String content, int categoryId, String tags) async {
+    final response = await http.put(
+      Uri.parse('$_baseUrl/posts/$postId'),
+      headers: await _getHeaders(),
+      body: jsonEncode({
+        'title': title,
+        'content': content,
+        'category_id': categoryId,
+        'tags': tags, // Kirim string "tag1, tag2"
+      }),
+    );
+
+    if (response.statusCode == 200) {
+      return true;
+    } else {
+      print('Gagal update post: ${response.body}');
+      throw Exception('Gagal memperbarui postingan.');
     }
   }
 
@@ -278,13 +335,26 @@ class ApiServices {
     }
   }
 
+  Future<bool> deleteComment(int commentId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/comments/$commentId'),
+      headers: await _getHeaders(),
+    );
+    return response.statusCode == 200;
+  }
+
   // --- Like ---
   Future<bool> likePost(int postId) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/posts/$postId/likes'),
       headers: await _getHeaders(),
     );
-    return response.statusCode == 200 || response.statusCode == 201;
+    if (response.statusCode == 200 || response.statusCode == 201) {
+      return true;
+    } else {
+      print('Gagal like postingan: ${response.statusCode} - ${response.body}');
+      return false;
+    }
   }
 
   Future<bool> unlikePost(int postId) async {
@@ -333,9 +403,10 @@ class ApiServices {
   }
 
   // --- Notifikasi ---
+
   Future<List<AppNotification>> getNotifications() async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/notifications'),
+      Uri.parse('$_baseUrl/notifications'), // Sesuai dengan routes/api.php
       headers: await _getHeaders(),
     );
 
@@ -343,12 +414,32 @@ class ApiServices {
       final dynamic decodedBody = jsonDecode(response.body);
       if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
         List<dynamic> data = decodedBody['data'];
-        return data.map((json) => AppNotification.fromJson(json as Map<String, dynamic>)).toList(); // Tambahkan cast
+        return data.map((json) => AppNotification.fromJson(json as Map<String, dynamic>)).toList();
       }
       return [];
     } else {
       print('Gagal mengambil notifikasi: ${response.statusCode} - ${response.body}');
       throw Exception('Gagal memuat notifikasi.');
+    }
+  }
+
+  Future<int> getUnreadNotificationCount() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_baseUrl/notifications/unread-count'), // Sesuai dengan routes/api.php
+        headers: await _getHeaders(),
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data is Map<String, dynamic> && data.containsKey('count')) {
+          return data['count'] as int;
+        }
+      }
+      return 0;
+    } catch (e) {
+      print('Error fetching unread notification count: $e');
+      return 0;
     }
   }
 
@@ -360,7 +451,64 @@ class ApiServices {
     return response.statusCode == 200;
   }
 
-  // --- Admin Dashboard (Fitur Khusus Admin) ---
+  Future<bool> markAllNotificationsAsRead() async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/notifications/read-all'),
+      headers: await _getHeaders(),
+    );
+    return response.statusCode == 200;
+  }
+
+  Future<List<CommentDetail>> getCommentDetails({
+    String? authorName,
+    int? postId, // <--- Ganti postTitle jadi postId
+    String? sortBy, 
+    int page = 1,
+  }) async {
+    Map<String, String> queryParams = {
+      'page': page.toString(),
+    };
+
+    if (postId != null) {
+      queryParams['post_id'] = postId.toString(); // <--- Kirim ID
+    }
+
+    Uri uri = Uri.parse('$_baseUrl/comments/details').replace(queryParameters: queryParams);
+
+    final response = await http.get(
+      uri,
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      try {
+        final dynamic decodedBody = jsonDecode(response.body);
+        if (decodedBody is! Map<String, dynamic>) {
+          throw Exception('Format respons API top-level untuk comments/details bukan Map. Tipe aktual: ${decodedBody.runtimeType}.');
+        }
+
+        final dynamic paginationData = decodedBody['data'];
+        if (paginationData is! Map<String, dynamic>) {
+          throw Exception('Format respons API tidak valid: Kunci "data" pertama dalam respons comments/details bukan Map. Tipe aktual: ${paginationData.runtimeType}.');
+        }
+
+        final dynamic commentsList = paginationData['data']; // Ini adalah array data dari Laravel Paginate
+        if (commentsList is! List<dynamic>) {
+          throw Exception('Format respons API tidak valid: Kunci "data" bersarang dalam respons comments/details bukan List. Tipe aktual: ${commentsList.runtimeType}.');
+        }
+        return commentsList.map((json) => CommentDetail.fromJson(json as Map<String, dynamic>)).toList();
+      } catch (e) {
+        print('Error memparsing respons API detail komentar: $e. Body: ${response.body}');
+        throw Exception('Gagal memparsing detail komentar dari respons API: ${e.toString()}');
+      }
+    } else {
+      print('Gagal mengambil detail komentar: ${response.statusCode} - ${response.body}');
+      throw Exception('Gagal memuat detail komentar. Status code: ${response.statusCode}');
+    }
+  }
+
+
+  // --- ADMIN FEATURES ---
   Future<Map<String, dynamic>> getAdminDashboardStats() async {
     final response = await http.get(
       Uri.parse('$_baseUrl/admin/dashboard-stats'),
@@ -370,8 +518,47 @@ class ApiServices {
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['data'];
     } else {
-      print('Gagal mengambil statistik admin: ${response.statusCode} - ${response.body}');
-      throw Exception('Gagal memuat statistik admin.');
+      print('Gagal load admin stats: ${response.body}');
+      throw Exception('Gagal memuat statistik admin');
     }
+  }
+  
+  // Fungsi delete post (jika belum ada)
+  Future<bool> deletePost(int postId) async {
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/posts/$postId'),
+      headers: await _getHeaders(),
+    );
+    return response.statusCode == 200;
+  }
+
+  // Like Komentar
+  Future<bool> toggleCommentLike(int commentId) async {
+    final response = await http.post(Uri.parse('$_baseUrl/comments/$commentId/like'), headers: await _getHeaders());
+    return response.statusCode == 200;
+  }
+
+  // Lapor Konten
+  Future<bool> reportContent(String type, int id, String reason) async {
+    final response = await http.post(
+      Uri.parse('$_baseUrl/reports'),
+      headers: await _getHeaders(),
+      body: jsonEncode({'type': type, 'id': id, 'reason': reason}),
+    );
+    return response.statusCode == 200;
+  }
+  
+  // Admin: Get Reports
+  Future<List<dynamic>> getReports() async {
+    final response = await http.get(Uri.parse('$_baseUrl/admin/reports'), headers: await _getHeaders());
+    if (response.statusCode == 200) {
+      return jsonDecode(response.body)['data'];
+    }
+    return [];
+  }
+  
+  // Admin: Dismiss Report
+  Future<void> dismissReport(int id) async {
+    await http.delete(Uri.parse('$_baseUrl/admin/reports/$id'), headers: await _getHeaders());
   }
 }

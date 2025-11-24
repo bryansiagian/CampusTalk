@@ -14,8 +14,14 @@ return new class extends Migration
             $table->foreignId('role_id')->constrained('roles')->onDelete('restrict'); // Foreign key ke roles
             $table->string('name');
             $table->string('email')->unique();
+            $table->string('nim')->unique()->nullable();
+            $table->string('prodi')->nullable();
+            $table->year('angkatan')->nullable();
             $table->string('password');
             $table->timestamp('email_verified_at')->nullable();
+            $table->boolean('is_approved')->default(false);
+
+            $table->rememberToken();
             $table->timestamps();
         });
     }
