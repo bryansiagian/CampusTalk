@@ -1,14 +1,14 @@
-// lib/screens/main_navigation_screen.dart
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'dart:async';
+import 'package:badges/badges.dart' as badges;
+
 import '../../services/api_services.dart';
 import 'package:flutter_campus_talk/screens/auth/login_screen.dart';
 import 'home/home_tab_screen.dart';
-import 'post/post_list_screen.dart';
+import 'post/create_post_screen.dart'; // Menu ke-2 adalah Buat Postingan
 import 'profile/profile_screen.dart';
-import 'package:flutter_campus_talk/screens/notification/notification_screen.dart'; // Import NotificationScreen
-import 'dart:async'; // Untuk Timer
-import 'package:badges/badges.dart' as badges; // Import badges
+import 'package:flutter_campus_talk/screens/notification/notification_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
   const MainNavigationScreen({Key? key}) : super(key: key);
@@ -23,10 +23,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   int _unreadNotificationCount = 0;
   Timer? _notificationPollingTimer;
 
+  // Widget untuk setiap Tab
   final List<Widget> _widgetOptions = <Widget>[
-    const HomeTabScreen(),
-    const PostListScreen(),
-    const ProfileScreen(),
+    const HomeTabScreen(),      // 0: Forum
+    const CreatePostScreen(),   // 1: Post (Form Buat Postingan)
+    const NotificationScreen(), // 2: Notifikasi
+    const ProfileScreen(),      // 3: Profil
   ];
 
   @override
@@ -37,14 +39,12 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   @override
   void dispose() {
-    _notificationPollingTimer?.cancel(); // Batalkan timer saat widget dibuang
+    _notificationPollingTimer?.cancel();
     super.dispose();
   }
 
   void _startNotificationPolling() {
-    // Ambil jumlah notifikasi saat init
     _fetchUnreadNotificationCount();
-    // Atur timer untuk polling setiap 30 detik
     _notificationPollingTimer = Timer.periodic(const Duration(seconds: 30), (timer) {
       _fetchUnreadNotificationCount();
     });
@@ -53,13 +53,13 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   Future<void> _fetchUnreadNotificationCount() async {
     try {
       final count = await _apiServices.getUnreadNotificationCount();
-      if (mounted) { // Pastikan widget masih aktif sebelum memanggil setState
+      if (mounted) {
         setState(() {
           _unreadNotificationCount = count;
         });
       }
     } catch (e) {
-      print('Error fetching unread notification count: $e');
+      print('Error fetching notification: $e');
     }
   }
 
@@ -67,82 +67,72 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
     setState(() {
       _selectedIndex = index;
     });
-  }
-
-  Future<void> _logout() async {
-    // ... (kode logout seperti sebelumnya)
-    try {
-      await _apiServices.logout();
-      SharedPreferences prefs = await SharedPreferences.getInstance();
-      await prefs.remove('token');
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Anda telah logout.'))
-      );
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (context) => LoginScreen()),
-        (Route<dynamic> route) => false,
-      );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Logout gagal: ${e.toString().replaceFirst('Exception: ', '')}')),
-      );
+    // Reset badge jika masuk tab notifikasi
+    if (index == 2) {
+      _fetchUnreadNotificationCount();
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('CampusTalk', style: TextStyle(color: Colors.white)),
-        centerTitle: true,
-        actions: [
-          badges.Badge( // Menggunakan widget Badge
-            showBadge: _unreadNotificationCount > 0,
-            position: badges.BadgePosition.topEnd(top: 0, end: 3),
-            badgeContent: Text(
-              _unreadNotificationCount.toString(),
-              style: const TextStyle(color: Colors.white, fontSize: 10),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.notifications, color: Colors.white),
-              onPressed: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const NotificationScreen()),
-                ).then((_) {
-                  // Saat kembali dari NotificationScreen, refresh count
-                  _fetchUnreadNotificationCount();
-                });
-              },
-            ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _logout,
-          ),
-        ],
-      ),
+      // AppBar dihapus agar tidak double dengan AppBar di Home/Profile
       body: Center(
         child: _widgetOptions.elementAt(_selectedIndex),
       ),
-      bottomNavigationBar: BottomNavigationBar(
-        items: const <BottomNavigationBarItem>[
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Beranda',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.article),
-            label: 'Postingan',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.person),
-            label: 'Profil',
-          ),
-        ],
-        currentIndex: _selectedIndex,
-        selectedItemColor: Theme.of(context).primaryColor,
-        unselectedItemColor: Colors.grey, // Tambahkan warna untuk item tidak terpilih
-        onTap: _onItemTapped,
+      bottomNavigationBar: Container(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: Colors.grey[200]!, width: 1.0)),
+        ),
+        child: BottomNavigationBar(
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.white,
+          elevation: 0,
+          currentIndex: _selectedIndex,
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
+          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+          unselectedLabelStyle: const TextStyle(fontWeight: FontWeight.normal, fontSize: 12),
+          onTap: _onItemTapped,
+          items: <BottomNavigationBarItem>[
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.chat_bubble_outline),
+              activeIcon: Icon(Icons.chat_bubble),
+              label: 'Forum',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.add_box_outlined),
+              activeIcon: Icon(Icons.add_box),
+              label: 'Post',
+            ),
+            BottomNavigationBarItem(
+              icon: badges.Badge(
+                showBadge: _unreadNotificationCount > 0,
+                position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                badgeContent: Text(
+                  _unreadNotificationCount.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+                child: const Icon(Icons.notifications_outlined),
+              ),
+              activeIcon: badges.Badge(
+                showBadge: _unreadNotificationCount > 0,
+                position: badges.BadgePosition.topEnd(top: -5, end: -2),
+                badgeContent: Text(
+                  _unreadNotificationCount.toString(),
+                  style: const TextStyle(color: Colors.white, fontSize: 10),
+                ),
+                child: const Icon(Icons.notifications),
+              ),
+              label: 'Notifikasi',
+            ),
+            const BottomNavigationBarItem(
+              icon: Icon(Icons.person_outline),
+              activeIcon: Icon(Icons.person),
+              label: 'Profil',
+            ),
+          ],
+        ),
       ),
     );
   }
