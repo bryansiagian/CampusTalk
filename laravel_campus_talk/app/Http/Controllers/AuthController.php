@@ -15,12 +15,18 @@ class AuthController extends Controller
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|string|email|max:255|unique:users',
+            'profile_picture' => 'nullable|image|max:2048',
             'password' => 'required|string|min:8|confirmed',
             // Validasi Wajib untuk Mahasiswa
             'nim' => 'required|string|max:20|unique:users',
-            'prodi' => 'required|string|max:100',
+            'prodi_id' => 'required|exists:prodis,id',
             'angkatan' => 'required|integer|digits:4',
         ]);
+
+        $profilePath = null;
+        if ($request->hasFile('profile_picture')) {
+            $profilePath = $request->file('profile_picture')->store('profiles', 'public');
+        }
 
         $userRole = \App\Models\Role::where('name', 'user')->first();
 
@@ -28,11 +34,12 @@ class AuthController extends Controller
             'name' => $request->name,
             'email' => $request->email,
             'password' => \Illuminate\Support\Facades\Hash::make($request->password),
+            'profile_picture' => $profilePath,
             'role_id' => $userRole->id,
             'is_approved' => false,
             // Simpan Data Baru
             'nim' => $request->nim,
-            'prodi' => $request->prodi,
+            'prodi_id' => $request->prodi_id,
             'angkatan' => $request->angkatan,
         ]);
 
@@ -81,5 +88,30 @@ class AuthController extends Controller
         $request->user()->currentAccessToken()->delete();
 
         return response()->json(['message' => 'Logout berhasil!']);
+    }
+
+    public function updateProfilePicture(Request $request)
+    {
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048', // Max 2MB
+        ]);
+
+        $user = auth()->user();
+
+        // Hapus foto lama jika ada
+        if ($user->profile_picture && \Illuminate\Support\Facades\Storage::exists('public/' . $user->profile_picture)) {
+            \Illuminate\Support\Facades\Storage::delete('public/' . $user->profile_picture);
+        }
+
+        // Upload baru
+        if ($request->hasFile('image')) {
+            $path = $request->file('image')->store('profiles', 'public');
+            $user->update(['profile_picture' => $path]);
+        }
+
+        return response()->json([
+            'message' => 'Foto profil diperbarui',
+            'user' => $user->load('role') // Return user terbaru
+        ]);
     }
 }

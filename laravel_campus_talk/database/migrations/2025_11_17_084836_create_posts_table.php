@@ -17,6 +17,9 @@ return new class extends Migration
             $table->foreignId('category_id')->constrained('categories')->onDelete('restrict');
             $table->string('title');
             $table->text('content'); // Gunakan text untuk konten yang panjang
+            $table->unsignedBigInteger('views')->default(0);
+            $table->string('media_path')->nullable(); // Lokasi file
+            $table->string('media_type')->nullable();
             $table->timestamps();
         });
     }

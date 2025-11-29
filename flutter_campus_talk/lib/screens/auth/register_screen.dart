@@ -1,7 +1,9 @@
-// lib/screens/auth/register_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../services/api_services.dart';
+import '../../models/prodi.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({Key? key}) : super(key: key);
@@ -11,13 +13,11 @@ class RegisterScreen extends StatefulWidget {
 }
 
 class _RegisterScreenState extends State<RegisterScreen> {
-  // Definisi Controller
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
   final _nimController = TextEditingController();
-  final _prodiController = TextEditingController();
   final _angkatanController = TextEditingController();
 
   final ApiServices _apiService = ApiServices();
@@ -26,84 +26,114 @@ class _RegisterScreenState extends State<RegisterScreen> {
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
 
+  File? _profileImage;
+  final ImagePicker _picker = ImagePicker();
+
+  // State Prodi
+  List<Prodi> _prodiList = [];
+  Prodi? _selectedProdi;
+  bool _isLoadingProdi = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchProdis();
+  }
+
+  Future<void> _fetchProdis() async {
+    try {
+      final list = await _apiService.getProdis();
+      
+      // Hapus duplikat jika ada (Safety)
+      final uniqueList = list.toSet().toList();
+
+      if (mounted) {
+        setState(() {
+          _prodiList = uniqueList;
+          _isLoadingProdi = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingProdi = false);
+      }
+    }
+  }
+
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 800,
+        maxHeight: 800,
+        imageQuality: 85,
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _profileImage = File(pickedFile.path);
+        });
+      }
+    } catch (e) {
+      print("Error pick image: $e");
+    }
+  }
+
   Future<void> _register() async {
-    // 1. Validasi Input Kosong
     if (_nameController.text.isEmpty ||
         _emailController.text.isEmpty ||
         _nimController.text.isEmpty ||     
-        _prodiController.text.isEmpty ||   
+        _selectedProdi == null || 
         _angkatanController.text.isEmpty ||
         _passwordController.text.isEmpty ||
         _confirmPasswordController.text.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Semua kolom harus diisi')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Semua kolom harus diisi')));
       return;
     }
 
-    // 2. Validasi Password Match
     if (_passwordController.text != _confirmPasswordController.text) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Password dan Konfirmasi Password tidak sama')),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password tidak sama')));
       return;
     }
 
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
 
     try {
-      // 3. Panggil API Register
       bool success = await _apiService.register(
         _nameController.text,
         _emailController.text,
         _passwordController.text,
         _confirmPasswordController.text,
         _nimController.text,       
-        _prodiController.text,     
+        _selectedProdi!.id,
         _angkatanController.text,
+        _profileImage,
       );
 
-      if (success) {
-        if (mounted) {
-          // 4. Tampilkan Dialog Sukses
-          await showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-              title: const Text('Registrasi Berhasil', style: TextStyle(fontWeight: FontWeight.bold)),
-              content: const Text(
-                'Akun Anda telah dibuat.\n\n'
-                'Demi keamanan, akun Anda berstatus "Pending".\n'
-                'Mohon tunggu persetujuan dari Admin sebelum Anda dapat Login.',
+      if (success && mounted) {
+        await showDialog(
+          context: context,
+          barrierDismissible: false,
+          builder: (context) => AlertDialog(
+            title: const Text('Registrasi Berhasil'),
+            content: const Text('Akun Anda telah dibuat dan sedang menunggu persetujuan Admin.'),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context); 
+                  Navigator.pop(context); 
+                },
+                child: const Text('OK'),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.pop(context); // Tutup Dialog
-                    Navigator.pop(context); // Kembali ke Login Screen
-                  },
-                  child: const Text('OK, Saya Mengerti', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ],
-            ),
-          );
-        }
+            ],
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString().replaceFirst('Exception:', ''))),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString().replaceFirst('Exception:', ''))));
       }
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -114,159 +144,136 @@ class _RegisterScreenState extends State<RegisterScreen> {
     _passwordController.dispose();
     _confirmPasswordController.dispose();
     _nimController.dispose();
-    _prodiController.dispose();
     _angkatanController.dispose();
     super.dispose();
   }
 
+  Widget _buildLabel(String text, ThemeData theme) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(
+        text,
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontWeight: FontWeight.bold,
+          fontSize: 14
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required Color fillColor,
+    required Color hintColor,
+    required Color iconColor,
+    TextInputType inputType = TextInputType.text,
+    bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onToggleVisibility,
+    int? maxLength,
+  }) {
+    return TextField(
+      controller: controller,
+      keyboardType: inputType,
+      obscureText: isPassword ? obscureText : false,
+      maxLength: maxLength,
+      style: TextStyle(color: iconColor), // Warna teks input
+      decoration: InputDecoration(
+        hintText: hintText,
+        hintStyle: TextStyle(color: hintColor, fontSize: 14),
+        filled: true,
+        fillColor: fillColor,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+        counterText: "",
+        suffixIcon: isPassword
+            ? IconButton(
+                icon: Icon(obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: hintColor),
+                onPressed: onToggleVisibility,
+              )
+            : null,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Warna UI sesuai desain
-    final Color mainBlueColor = const Color(0xFF1855F4);
-    final Color inputFillColor = const Color(0xFFF3F4F6);
+    // --- SETUP TEMA ---
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+    
+    // Warna Background Utama: Biru (Light) atau Hitam/DarkGrey (Dark)
+    final Color backgroundColor = isDark ? theme.scaffoldBackgroundColor : theme.primaryColor;
+    
+    // Warna Kartu
+    final Color cardColor = theme.cardColor;
+    
+    // Warna Input Field
+    final Color inputFillColor = isDark ? Colors.grey[800]! : const Color(0xFFF3F4F6);
+    final Color hintColor = isDark ? Colors.grey[400]! : Colors.grey;
+    final Color textColor = isDark ? Colors.white : Colors.black87;
 
     return Scaffold(
-      backgroundColor: mainBlueColor,
+      backgroundColor: backgroundColor,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 24.0),
+            padding: const EdgeInsets.all(24.0),
             child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // Header Teks di Luar Kartu
                 const Text(
                   'Daftar Akun Baru',
-                  style: TextStyle(
-                    fontSize: 24, 
-                    fontWeight: FontWeight.bold, 
-                    color: Colors.white
-                  ),
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 8),
-                const Text(
+                Text(
                   'Bergabung dengan komunitas IT Del',
-                  style: TextStyle(
-                    fontSize: 14, 
-                    color: Colors.white70
-                  ),
+                  style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.8)),
                 ),
                 const SizedBox(height: 24),
 
-                // Kartu Putih Utama
                 Container(
                   padding: const EdgeInsets.all(24.0),
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: cardColor,
                     borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
-                        blurRadius: 10,
-                        offset: const Offset(0, 5),
-                      ),
+                        blurRadius: 10, 
+                        offset: const Offset(0, 5)
+                      )
                     ],
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // --- NAMA ---
-                      _buildLabel('Nama Lengkap'),
-                      _buildTextField(
-                        controller: _nameController,
-                        hintText: 'Masukkan nama lengkap',
-                        fillColor: inputFillColor,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- NIM ---
-                      _buildLabel('NIM'),
-                      _buildTextField(
-                        controller: _nimController,
-                        hintText: 'Masukkan NIM',
-                        inputType: TextInputType.number,
-                        fillColor: inputFillColor,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- PRODI ---
-                      _buildLabel('Program Studi'),
-                      _buildTextField(
-                        controller: _prodiController,
-                        hintText: 'Contoh: D3 Teknologi Komputer',
-                        fillColor: inputFillColor,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- ANGKATAN ---
-                      _buildLabel('Angkatan'),
-                      _buildTextField(
-                        controller: _angkatanController,
-                        hintText: 'Contoh: 2023',
-                        inputType: TextInputType.number,
-                        fillColor: inputFillColor,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- EMAIL ---
-                      _buildLabel('Email Kampus'),
-                      _buildTextField(
-                        controller: _emailController,
-                        hintText: 'nama@students.del.ac.id',
-                        inputType: TextInputType.emailAddress,
-                        fillColor: inputFillColor,
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- PASSWORD ---
-                      _buildLabel('Kata Sandi'),
-                      _buildTextField(
-                        controller: _passwordController,
-                        hintText: 'Minimal 6 karakter',
-                        fillColor: inputFillColor,
-                        isPassword: true,
-                        obscureText: _obscurePassword,
-                        onToggleVisibility: () {
-                          setState(() {
-                            _obscurePassword = !_obscurePassword;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 16),
-
-                      // --- CONFIRM PASSWORD ---
-                      _buildLabel('Konfirmasi Kata Sandi'),
-                      _buildTextField(
-                        controller: _confirmPasswordController,
-                        hintText: 'Masukkan kata sandi sekali lagi',
-                        fillColor: inputFillColor,
-                        isPassword: true,
-                        obscureText: _obscureConfirmPassword,
-                        onToggleVisibility: () {
-                          setState(() {
-                            _obscureConfirmPassword = !_obscureConfirmPassword;
-                          });
-                        },
-                      ),
-                      const SizedBox(height: 24),
-
-                      // Info Box (Syarat & Ketentuan visual)
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Colors.blue[50],
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: Colors.blue.withOpacity(0.3)),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
-                            Icon(Icons.info_outline, color: Colors.blue, size: 20),
-                            SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Dengan mendaftar, Anda menyetujui untuk menggunakan forum dengan etika yang baik.',
-                                style: TextStyle(fontSize: 12, color: Colors.blue),
+                      // FOTO PROFIL
+                      Center(
+                        child: Stack(
+                          children: [
+                            CircleAvatar(
+                              radius: 40,
+                              backgroundColor: inputFillColor,
+                              backgroundImage: _profileImage != null ? FileImage(_profileImage!) : null,
+                              child: _profileImage == null 
+                                ? Icon(Icons.person, size: 40, color: hintColor) 
+                                : null,
+                            ),
+                            Positioned(
+                              bottom: 0, right: 0,
+                              child: GestureDetector(
+                                onTap: _pickImage,
+                                child: Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: theme.primaryColor,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: cardColor, width: 2)
+                                  ),
+                                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 14),
+                                ),
                               ),
                             ),
                           ],
@@ -274,47 +281,133 @@ class _RegisterScreenState extends State<RegisterScreen> {
                       ),
                       const SizedBox(height: 24),
 
-                      // Tombol Daftar
+                      _buildLabel('Nama Lengkap', theme),
+                      _buildTextField(
+                        controller: _nameController, 
+                        hintText: 'Masukkan nama lengkap',
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('NIM', theme),
+                      _buildTextField(
+                        controller: _nimController, 
+                        hintText: 'Masukkan NIM', 
+                        inputType: TextInputType.number,
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 16),
+
+                      // --- DROPDOWN PRODI ---
+                      _buildLabel('Program Studi', theme),
+                      _isLoadingProdi
+                          ? Center(child: Padding(padding: const EdgeInsets.all(8.0), child: CircularProgressIndicator(color: theme.primaryColor)))
+                          : Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              decoration: BoxDecoration(
+                                color: inputFillColor,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: DropdownButtonHideUnderline(
+                                child: DropdownButton<Prodi>(
+                                  value: _selectedProdi,
+                                  isExpanded: true,
+                                  dropdownColor: cardColor, // Dropdown menu bg
+                                  hint: Text(
+                                    'Pilih Program Studi',
+                                    style: TextStyle(color: hintColor, fontSize: 14),
+                                  ),
+                                  icon: Icon(Icons.arrow_drop_down, color: hintColor),
+                                  items: _prodiList.map((Prodi prodi) {
+                                    return DropdownMenuItem<Prodi>(
+                                      value: prodi,
+                                      child: Text(
+                                        prodi.name,
+                                        style: TextStyle(color: textColor, fontSize: 14),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: _prodiList.isEmpty 
+                                      ? null 
+                                      : (Prodi? newValue) {
+                                          setState(() {
+                                            _selectedProdi = newValue;
+                                          });
+                                          FocusScope.of(context).requestFocus(FocusNode());
+                                        },
+                                ),
+                              ),
+                            ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Angkatan', theme),
+                      _buildTextField(
+                        controller: _angkatanController, 
+                        hintText: 'Contoh: 2023', 
+                        inputType: TextInputType.number, 
+                        maxLength: 4,
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Email Kampus', theme),
+                      _buildTextField(
+                        controller: _emailController, 
+                        hintText: 'nama@students.del.ac.id', 
+                        inputType: TextInputType.emailAddress,
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Kata Sandi', theme),
+                      _buildTextField(
+                        controller: _passwordController,
+                        hintText: 'Minimal 6 karakter',
+                        isPassword: true,
+                        obscureText: _obscurePassword,
+                        onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildLabel('Konfirmasi Kata Sandi', theme),
+                      _buildTextField(
+                        controller: _confirmPasswordController,
+                        hintText: 'Ulangi kata sandi',
+                        isPassword: true,
+                        obscureText: _obscureConfirmPassword,
+                        onToggleVisibility: () => setState(() => _obscureConfirmPassword = !_obscureConfirmPassword),
+                        fillColor: inputFillColor, hintColor: hintColor, iconColor: textColor
+                      ),
+                      const SizedBox(height: 32),
+
                       _isLoading
-                          ? Center(child: SpinKitThreeBounce(color: mainBlueColor, size: 30.0))
+                          ? Center(child: SpinKitThreeBounce(color: theme.primaryColor, size: 30.0))
                           : SizedBox(
                               width: double.infinity,
                               height: 50,
                               child: ElevatedButton(
                                 onPressed: _register,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: mainBlueColor,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
-                                  ),
-                                  elevation: 0,
+                                  backgroundColor: theme.primaryColor,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  elevation: 2,
                                 ),
-                                child: const Text(
-                                  'Daftar',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
-                                ),
+                                child: const Text('Daftar', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                               ),
                             ),
-
+                      
                       const SizedBox(height: 20),
-
-                      // Footer Login
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("Sudah punya akun? ", style: TextStyle(color: Colors.black54)),
+                          Text("Sudah punya akun? ", style: TextStyle(color: textColor.withOpacity(0.7))),
                           GestureDetector(
                             onTap: () => Navigator.pop(context),
                             child: Text(
-                              "Masuk sekarang",
-                              style: TextStyle(
-                                color: mainBlueColor,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              "Masuk", 
+                              style: TextStyle(color: theme.primaryColor, fontWeight: FontWeight.bold)
                             ),
                           ),
                         ],
@@ -326,67 +419,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-
-  // --- Widget Helper untuk Label ---
-  Widget _buildLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8.0),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 14,
-          color: Colors.black87,
-        ),
-      ),
-    );
-  }
-
-  // --- Widget Helper untuk TextField ---
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String hintText,
-    required Color fillColor,
-    TextInputType inputType = TextInputType.text,
-    bool isPassword = false,
-    bool obscureText = false,
-    VoidCallback? onToggleVisibility,
-  }) {
-    return TextField(
-      controller: controller,
-      keyboardType: inputType,
-      obscureText: isPassword ? obscureText : false,
-      decoration: InputDecoration(
-        hintText: hintText,
-        hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        filled: true,
-        fillColor: fillColor,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
-        ),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: BorderSide.none,
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF1855F4), width: 1),
-        ),
-        suffixIcon: isPassword
-            ? IconButton(
-                icon: Icon(
-                  obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                  color: Colors.grey,
-                  size: 20,
-                ),
-                onPressed: onToggleVisibility,
-              )
-            : null,
       ),
     );
   }

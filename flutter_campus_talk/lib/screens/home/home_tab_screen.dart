@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_campus_talk/screens/post/post_detail_screen.dart';
 import '../../models/post.dart';
+import '../../models/user.dart';
 import '../../services/api_services.dart';
 import '../post/create_post_screen.dart';
-// IMPORT SCREEN LAIN UNTUK NAVIGASI ICON ATAS
 import '../notification/notification_screen.dart';
-import '../profile/profile_screen.dart'; 
+import '../profile/profile_screen.dart';
+import '../search/search_screen.dart';
 
 class HomeTabScreen extends StatefulWidget {
   const HomeTabScreen({super.key});
@@ -15,38 +16,59 @@ class HomeTabScreen extends StatefulWidget {
 }
 
 class _HomeTabScreenState extends State<HomeTabScreen> {
-  int _selectedCategoryIndex = 0;
   final ApiServices _apiServices = ApiServices();
   
-  final List<String> _categories = [
-    "Semua", "Tugas Kuliah", "Pengumuman", "Magang", "Skripsi", "Tips & Trik"
-  ];
-
   List<Post> _posts = [];
-  bool _isLoading = true;
+  bool _isLoadingPosts = true;
+  User? _currentUser;
 
   @override
   void initState() {
     super.initState();
+    _fetchUserData();
     _fetchPosts();
   }
 
-  Future<void> _fetchPosts() async {
+  // Helper URL Gambar
+  String _fixImageUrl(String url) {
+    if (url.startsWith('/')) return 'http://10.0.2.2:8000$url';
+    if (url.contains('localhost')) return url.replaceAll('localhost', '10.0.2.2');
+    if (url.contains('127.0.0.1')) return url.replaceAll('127.0.0.1', '10.0.2.2');
+    return url;
+  }
+
+  Future<void> _fetchUserData() async {
     try {
-      final posts = await _apiServices.getPosts();
+      final user = await _apiServices.getCurrentUser();
+      if (mounted) setState(() => _currentUser = user);
+    } catch (e) {
+      print("Error fetching user: $e");
+    }
+  }
+
+  // Fetch Postingan Terbaru (Tanpa Filter Kategori)
+  Future<void> _fetchPosts() async {
+    setState(() => _isLoadingPosts = true);
+    try {
+      // Langsung ambil semua postingan terbaru
+      final posts = await _apiServices.getPosts(
+        sortBy: 'latest', 
+      );
+      
       if (mounted) {
         setState(() {
           _posts = posts;
-          _isLoading = false;
+          _isLoadingPosts = false;
         });
       }
     } catch (e) {
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoadingPosts = false);
       print("Error fetching posts: $e");
     }
   }
 
   Future<void> _handleRefresh() async {
+    await _fetchUserData();
     await _fetchPosts();
   }
 
@@ -55,12 +77,12 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
       final DateTime postDate = DateTime.parse(createdAt);
       final Duration difference = DateTime.now().difference(postDate);
       if (difference.inDays > 7) return "${postDate.day}/${postDate.month}/${postDate.year}";
-      if (difference.inDays >= 1) return "${difference.inDays} hari lalu";
-      if (difference.inHours >= 1) return "${difference.inHours} jam lalu";
-      if (difference.inMinutes >= 1) return "${difference.inMinutes} menit lalu";
+      if (difference.inDays >= 1) return "${difference.inDays}hr";
+      if (difference.inHours >= 1) return "${difference.inHours}j";
+      if (difference.inMinutes >= 1) return "${difference.inMinutes}m";
       return "Baru saja";
     } catch (e) {
-      return "Baru saja";
+      return "Now";
     }
   }
 
@@ -71,56 +93,77 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Tema Dinamis
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final textTheme = theme.textTheme;
+    final isDark = theme.brightness == Brightness.dark;
+    
+    final searchBarColor = isDark ? Colors.grey[800] : Colors.grey[200];
+    final iconColor = isDark ? Colors.grey[400] : Colors.grey[600];
+
     return Scaffold(
-      backgroundColor: Colors.grey[50],
+      backgroundColor: theme.scaffoldBackgroundColor,
+      
       appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0.5,
-        automaticallyImplyLeading: false,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: const BoxDecoration(color: Colors.blue, shape: BoxShape.circle),
-              child: const Icon(Icons.chat_bubble_outline, color: Colors.white, size: 20),
-            ),
-            const SizedBox(width: 12),
-            const Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("CampusTalk", style: TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.bold)),
-                Text("Forum Mahasiswa IT Del", style: TextStyle(color: Colors.grey, fontSize: 12)),
-              ],
-            ),
-          ],
+        backgroundColor: theme.appBarTheme.backgroundColor ?? theme.cardColor,
+        elevation: 0,
+        scrolledUnderElevation: 0,
+        title: Text(
+          "CampusTalk", 
+          style: TextStyle(
+            color: colorScheme.primary, 
+            fontSize: 22, 
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.5
+          )
         ),
-        // --- BAGIAN INI DITAMBAHKAN (ICON LONCENG & PROFIL DI ATAS) ---
+        centerTitle: false,
         actions: [
-          // Icon Notifikasi
+          // 1. TOMBOL CARI (Menuju SearchScreen)
+          IconButton(
+            onPressed: () {
+              Navigator.push(context, MaterialPageRoute(builder: (context) => const SearchScreen()));
+            },
+            icon: Icon(Icons.search, color: textTheme.bodyLarge?.color, size: 26),
+            tooltip: "Cari Postingan",
+          ),
+          
+          // 2. TOMBOL NOTIFIKASI
           IconButton(
             onPressed: () {
               Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationScreen()));
             },
-            icon: const Icon(Icons.notifications_outlined, color: Colors.black54),
+            icon: Icon(Icons.notifications_none_rounded, color: textTheme.bodyLarge?.color, size: 26),
           ),
-          // Icon Profil
+
+          // 3. AVATAR PROFIL
           Padding(
-            padding: const EdgeInsets.only(right: 16.0),
+            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
             child: GestureDetector(
               onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()));
+                Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()))
+                    .then((_) => _handleRefresh());
               },
-              child: const CircleAvatar(
-                radius: 14,
-                backgroundColor: Colors.grey,
-                child: Icon(Icons.person, size: 18, color: Colors.white),
+              child: CircleAvatar(
+                radius: 16,
+                backgroundColor: searchBarColor,
+                backgroundImage: (_currentUser != null && _currentUser!.profilePictureUrl != null)
+                    ? NetworkImage(_fixImageUrl(_currentUser!.profilePictureUrl!))
+                    : null,
+                child: (_currentUser == null || _currentUser!.profilePictureUrl == null)
+                    ? Icon(Icons.person, size: 20, color: iconColor)
+                    : null,
               ),
             ),
           ),
         ],
-        // -------------------------------------------------------------
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Container(color: theme.dividerColor, height: 1),
+        ),
       ),
-      
+
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -130,173 +173,194 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
             if (value == true) _handleRefresh();
           });
         },
-        backgroundColor: Colors.blue,
+        backgroundColor: colorScheme.primary,
+        elevation: 4,
         shape: const CircleBorder(),
-        child: const Icon(Icons.add, color: Colors.white),
+        child: Icon(Icons.add, color: colorScheme.onPrimary, size: 32),
       ),
 
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
-        child: SingleChildScrollView(
+        color: colorScheme.primary,
+        child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
-          child: Column(
-            children: [
-              // Search Bar
-              Container(
-                padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                color: Colors.white,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  height: 45,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey[300]!),
-                  ),
-                  child: Row(
+          slivers: [
+            // 1. LIST POSTINGAN (FEED)
+            if (_isLoadingPosts)
+              SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: colorScheme.primary)))
+            else if (_posts.isEmpty)
+              SliverFillRemaining(
+                child: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      const Icon(Icons.search, color: Colors.grey),
-                      const SizedBox(width: 8),
-                      const Expanded(
-                        child: TextField(
-                          decoration: InputDecoration(
-                            hintText: "Cari postingan...",
-                            hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
-                            border: InputBorder.none,
-                            isDense: true,
-                          ),
-                        ),
-                      ),
-                      Icon(Icons.filter_list, color: Colors.grey[600]),
+                      Icon(Icons.forum_outlined, size: 80, color: iconColor),
+                      const SizedBox(height: 16),
+                      Text("Belum ada postingan terbaru", style: TextStyle(color: iconColor)),
                     ],
                   ),
                 ),
-              ),
-
-              // Filter Kategori
-              Container(
-                color: Colors.white,
-                width: double.infinity,
-                padding: const EdgeInsets.only(bottom: 12, left: 16),
-                child: SingleChildScrollView(
-                  scrollDirection: Axis.horizontal,
-                  child: Row(
-                    children: List.generate(_categories.length, (index) {
-                      final isSelected = index == _selectedCategoryIndex;
-                      return Padding(
-                        padding: const EdgeInsets.only(right: 8.0),
-                        child: GestureDetector(
-                          onTap: () => setState(() => _selectedCategoryIndex = index),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: isSelected ? Colors.black : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: isSelected ? Colors.black : Colors.grey[300]!),
-                            ),
-                            child: Text(
-                              _categories[index],
-                              style: TextStyle(
-                                color: isSelected ? Colors.white : Colors.black87,
-                                fontSize: 12, fontWeight: FontWeight.w500
-                              ),
-                            ),
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                ),
-              ),
-
-              // List Postingan
-              if (_isLoading)
-                const Padding(padding: EdgeInsets.only(top: 50), child: CircularProgressIndicator())
-              else if (_posts.isEmpty)
-                const Padding(
-                  padding: EdgeInsets.only(top: 60),
-                  child: Text("Belum ada postingan", style: TextStyle(color: Colors.grey)),
-                )
-              else
-                ListView.builder(
-                  physics: const NeverScrollableScrollPhysics(),
-                  shrinkWrap: true,
-                  itemCount: _posts.length,
-                  itemBuilder: (context, index) {
-                    return _buildPostCard(_posts[index]);
+              )
+            else
+              SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    return _buildTwitterStylePost(_posts[index], theme, colorScheme);
                   },
+                  childCount: _posts.length,
                 ),
-              const SizedBox(height: 80),
-            ],
-          ),
+              ),
+              
+            const SliverToBoxAdapter(child: SizedBox(height: 80)),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildPostCard(Post post) {
-    return GestureDetector(
+  Widget _buildTwitterStylePost(Post post, ThemeData theme, ColorScheme colorScheme) {
+    final textPrimary = theme.textTheme.bodyLarge?.color;
+    final textSecondary = theme.textTheme.bodyMedium?.color;
+    final borderColor = theme.dividerColor;
+
+    return InkWell(
       onTap: () {
-         Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(postId: post.id)));
+        Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(postId: post.id)))
+            .then((_) => _handleRefresh());
       },
       child: Container(
-        margin: const EdgeInsets.only(top: 8),
-        padding: const EdgeInsets.all(16),
+        // Background color dipindah ke dalam BoxDecoration
+        margin: const EdgeInsets.only(bottom: 1),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
-          color: Colors.white,
-          border: Border.symmetric(horizontal: BorderSide(color: Colors.grey[200]!, width: 1)),
+          color: theme.cardColor, 
+          border: Border(bottom: BorderSide(color: borderColor, width: 0.5)),
         ),
-        child: Column(
+        child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                CircleAvatar(
-                  radius: 20,
-                  backgroundColor: _getAvatarColor(post.author.name),
-                  child: Text(post.author.name.isNotEmpty ? post.author.name[0].toUpperCase() : "?", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+            // Avatar Penulis
+            CircleAvatar(
+              radius: 22,
+              backgroundColor: _getAvatarColor(post.author.name),
+              backgroundImage: post.author.profilePictureUrl != null 
+                  ? NetworkImage(_fixImageUrl(post.author.profilePictureUrl!))
+                  : null,
+              child: post.author.profilePictureUrl == null
+                  ? Text(
+                      post.author.name.isNotEmpty ? post.author.name[0].toUpperCase() : "?", 
+                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 12),
+            
+            // Konten Postingan
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header (Nama & Waktu)
+                  Row(
                     children: [
-                      Text(post.author.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                      Text(_calculateTimeAgo(post.createdAt), style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                      Flexible(
+                        child: Text(
+                          post.author.name,
+                          style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 15),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        "• ${_calculateTimeAgo(post.createdAt)}", 
+                        style: TextStyle(color: textSecondary, fontSize: 13)
+                      ),
                     ],
                   ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(4)),
-                  child: Text(post.category.name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black54)),
-                ),
-              ],
+                  
+                  // Kategori
+                  const SizedBox(height: 2),
+                  Text(
+                    post.category.name, 
+                    style: TextStyle(color: textSecondary, fontSize: 11)
+                  ),
+
+                  // Judul & Isi
+                  const SizedBox(height: 6),
+                  Text(
+                    post.title, 
+                    style: TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)
+                  ),
+                  Text(
+                    post.content, 
+                    style: TextStyle(color: textPrimary, fontSize: 14, height: 1.4), 
+                    maxLines: 4, 
+                    overflow: TextOverflow.ellipsis
+                  ),
+                  
+                  // Media (Gambar)
+                  if (post.mediaUrl != null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 10),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          decoration: BoxDecoration(
+                            border: Border.all(color: borderColor)
+                          ),
+                          child: Image.network(
+                            _fixImageUrl(post.mediaUrl!),
+                            width: double.infinity, height: 200, fit: BoxFit.cover,
+                            errorBuilder: (_,__,___) => const SizedBox(),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  // Tags
+                  if (post.tags != null && post.tags!.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: Wrap(
+                        spacing: 8, 
+                        children: post.tags!.map((t) => Text("#${t.name}", style: TextStyle(color: colorScheme.primary, fontSize: 13))).toList()
+                      ),
+                    ),
+
+                  // Tombol Aksi (Like, Comment, View)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 12.0, right: 16.0),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _buildActionIcon(Icons.chat_bubble_outline, "${post.totalComments}", textSecondary),
+                        _buildActionIcon(
+                          post.isLikedByCurrentUser ? Icons.favorite : Icons.favorite_border,
+                          "${post.totalLikes}", 
+                          post.isLikedByCurrentUser ? Colors.pink : textSecondary
+                        ),
+                        _buildActionIcon(Icons.bar_chart_rounded, "${post.views}", textSecondary),
+                        Icon(Icons.share_outlined, size: 18, color: textSecondary),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Text(post.title, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 6),
-            Text(post.content, style: TextStyle(fontSize: 14, color: Colors.grey[800], height: 1.4), maxLines: 3, overflow: TextOverflow.ellipsis),
-            const SizedBox(height: 10),
-            if (post.tags != null)
-              Wrap(spacing: 8, children: post.tags!.map((t) => Text("#${t.name}", style: const TextStyle(color: Colors.blue, fontSize: 12))).toList()),
-            const SizedBox(height: 12),
-            const Divider(),
-            Row(
-              children: [
-                Icon(post.isLikedByCurrentUser ? Icons.favorite : Icons.favorite_border, size: 18, color: post.isLikedByCurrentUser ? Colors.red : Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text("${post.totalLikes}", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-                const SizedBox(width: 16),
-                Icon(Icons.chat_bubble_outline, size: 18, color: Colors.grey[600]),
-                const SizedBox(width: 4),
-                Text("${post.totalComments}", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
-              ],
-            )
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildActionIcon(IconData icon, String count, Color? color) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color),
+        const SizedBox(width: 4),
+        Text(count, style: TextStyle(fontSize: 12, color: color, fontWeight: FontWeight.w500)),
+      ],
     );
   }
 }

@@ -4,7 +4,8 @@ import '../../services/api_services.dart';
 import '../../models/post.dart';
 import '../../models/comment_detail.dart';
 import '../../models/user.dart';
-import '../post/edit_screen.dart'; // Pastikan nama file sesuai
+import '../post/edit_post_screen.dart';
+import '../profile/profile_screen.dart'; // <--- 1. IMPORT PROFILE SCREEN
 
 class PostDetailScreen extends StatefulWidget {
   final int postId;
@@ -20,6 +21,10 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   User? _currentUser;
   
   List<CommentDetail> _structuredComments = [];
+  
+  // MAP PENTING: Menyimpan ID Komentar -> Nama user yang dibalas
+  final Map<int, String> _replyingToUserMap = {}; 
+  
   bool _isLoadingComments = true;
   
   final TextEditingController _commentController = TextEditingController();
@@ -40,6 +45,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     _fetchPostData();
   }
 
+  String _fixImageUrl(String url) {
+    url = url.trim();
+    if (url.startsWith('/')) return 'http://10.0.2.2:8000$url';
+    if (url.contains('localhost')) return url.replaceAll('localhost', '10.0.2.2');
+    if (url.contains('127.0.0.1')) return url.replaceAll('127.0.0.1', '10.0.2.2');
+    return url;
+  }
+
   Future<void> _loadCurrentUser() async {
     try {
       User? user = await _apiServices.getCurrentUser();
@@ -56,36 +69,54 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         setState(() {
           _currentUserHasLiked = post.isLikedByCurrentUser;
           _currentTotalComments = post.totalComments;
-          _totalLikesFromFunction = post.totalLikesViaFunction; // Pastikan model Post punya ini
+          _totalLikesFromFunction = post.totalLikesViaFunction;
         });
         _fetchAndStructureComments(post.id);
       }
     });
   }
 
+  // --- LOGIKA UTAMA: MERATAKAN TREE & MENCATAT "MEMBALAS SIAPA" ---
   Future<void> _fetchAndStructureComments(int postId) async {
     setState(() => _isLoadingComments = true);
     try {
       List<CommentDetail> flatComments = await _apiServices.getCommentDetails(
         postId: postId, 
-        sortBy: 'oldest'
+        sortBy: 'oldest' 
       );
 
-      // Logika menyusun komentar (Parent -> Child)
       List<CommentDetail> rootComments = [];
       Map<int, CommentDetail> commentMap = {};
+      _replyingToUserMap.clear(); // Reset map info balasan
 
+      // 1. Mapping ID ke Object
       for (var c in flatComments) {
         commentMap[c.commentId] = c;
-        c.replies = [];
+        c.replies = []; 
       }
 
+      // 2. Susun Struktur & Deteksi Balasan
       for (var c in flatComments) {
         if (c.parentCommentId == null) {
+          // LEVEL 1: Komentar Utama
           rootComments.add(c);
         } else {
-          if (commentMap.containsKey(c.parentCommentId)) {
-            commentMap[c.parentCommentId]!.replies.add(c);
+          // LEVEL 2+: Balasan
+          CommentDetail? directParent = commentMap[c.parentCommentId];
+          
+          if (directParent != null) {
+            // Cari Induk Paling Atas (Root)
+            CommentDetail? ultimateRoot = _findUltimateRoot(directParent, commentMap);
+            
+            if (ultimateRoot != null) {
+              // Masukkan ke list replies milik ROOT (agar tampilan cuma 2 level)
+              ultimateRoot.replies.add(c);
+
+              // LOGIKA KETERANGAN "MEMBALAS SIAPA":
+              if (directParent.commentId != ultimateRoot.commentId) {
+                _replyingToUserMap[c.commentId] = directParent.commenterName;
+              }
+            }
           }
         }
       }
@@ -101,6 +132,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     }
   }
 
+  // Fungsi Rekursif cari Root
+  CommentDetail? _findUltimateRoot(CommentDetail current, Map<int, CommentDetail> map) {
+    if (current.parentCommentId == null) return current; 
+    CommentDetail? parent = map[current.parentCommentId];
+    if (parent == null) return null; 
+    return _findUltimateRoot(parent, map);
+  }
+
   Future<void> _addComment() async {
     if (_commentController.text.isEmpty) return;
     try {
@@ -112,7 +151,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
       _commentController.clear();
       _cancelReply(); 
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Komentar terkirim')));
-      _fetchPostData(); // Refresh data untuk update jumlah komentar
+      _fetchPostData(); 
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Gagal: $e')));
     }
@@ -134,7 +173,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     if (confirm) {
       bool success = await _apiServices.deletePost(widget.postId);
       if (success) {
-        Navigator.pop(context); // Tutup screen
+        Navigator.pop(context);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Postingan dihapus.")));
       }
     }
@@ -184,7 +223,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         title: const Text("Laporkan Postingan"),
         content: TextField(
           controller: reasonController,
-          decoration: const InputDecoration(hintText: "Alasan (misal: spam, kasar)"),
+          decoration: const InputDecoration(hintText: "Alasan"),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text("Batal")),
@@ -219,36 +258,30 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
     FocusScope.of(context).unfocus();
   }
 
-  // Helper Warna Avatar
-  Color _getAvatarColor(String name) {
-    if (name.isEmpty) return Colors.blue;
-    return Colors.primaries[name.codeUnitAt(0) % Colors.primaries.length];
-  }
-
-  // Helper Waktu
-  String _calculateTimeAgo(String createdAt) {
-    try {
-      final DateTime postDate = DateTime.parse(createdAt);
-      final Duration difference = DateTime.now().difference(postDate);
-      if (difference.inDays > 7) return "${postDate.day}/${postDate.month}/${postDate.year}";
-      if (difference.inDays >= 1) return "${difference.inDays} hari lalu";
-      if (difference.inHours >= 1) return "${difference.inHours} jam lalu";
-      if (difference.inMinutes >= 1) return "${difference.inMinutes} menit lalu";
-      return "Baru saja";
-    } catch (e) {
-      return "";
-    }
+  // --- FUNGSI NAVIGASI KE PROFIL ---
+  void _navigateToProfile(int userId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProfileScreen(userId: userId),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final textPrimary = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final textSecondary = theme.textTheme.bodyMedium?.color ?? Colors.grey;
+    final primaryColor = theme.primaryColor;
+    final cardColor = theme.cardTheme.color ?? Colors.white;
+    final isDark = theme.brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white, // Background putih sesuai Figma
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: const Text('Detail Postingan', style: TextStyle(color: Colors.white, fontSize: 16)),
+        title: const Text('Detail Postingan', style: TextStyle(color: Colors.white)),
         centerTitle: true,
-        backgroundColor: Colors.blue, // AppBar Biru
-        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           FutureBuilder<Post>(
             future: _postDetailFuture,
@@ -257,23 +290,18 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                 final post = snapshot.data!;
                 bool isOwner = post.author.id == _currentUser!.id;
                 bool isAdmin = _currentUser!.isAdmin;
-                
                 return PopupMenuButton<String>(
                   onSelected: (val) async {
                     if (val == 'delete') _deletePost();
                     if (val == 'report') _reportPost();
-                    
                     if (val == 'edit') {
                       final result = await Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => EditPostScreen(post: post)),
+                        MaterialPageRoute(
+                          builder: (context) => EditPostScreen(post: post),
+                        ),
                       );
-                      // Jika kembali dengan 'deleted', tutup juga screen ini
-                      if (result == 'deleted') {
-                        Navigator.pop(context, true);
-                      } else if (result == true) {
-                        _fetchPostData(); 
-                      }
+                      if (result == true) _fetchPostData(); 
                     }
                   },
                   itemBuilder: (context) => [
@@ -295,7 +323,7 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
         future: _postDetailFuture,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return Center(child: SpinKitFadingCircle(color: Colors.blue));
+            return Center(child: SpinKitFadingCircle(color: Theme.of(context).primaryColor));
           } else if (!snapshot.hasData) {
             return const Center(child: Text('Data tidak ditemukan'));
           } else {
@@ -306,122 +334,118 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
               children: [
                 Expanded(
                   child: ListView(
-                    padding: const EdgeInsets.all(20.0),
+                    padding: const EdgeInsets.all(16.0),
                     children: [
-                      // --- HEADER USER ---
+                      // --- HEADER POSTINGAN DENGAN NAVIGASI PROFIL ---
                       Row(
                         children: [
-                          CircleAvatar(
-                            radius: 22,
-                            backgroundColor: _getAvatarColor(post.author.name),
-                            child: Text(post.author.name[0].toUpperCase(), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                          // 1. AVATAR (KLIK UNTUK LIHAT PROFIL)
+                          InkWell(
+                            onTap: () => _navigateToProfile(post.author.id),
+                            child: CircleAvatar(
+                              radius: 20,
+                              backgroundColor: primaryColor,
+                              backgroundImage: post.author.profilePictureUrl != null 
+                                  ? NetworkImage(_fixImageUrl(post.author.profilePictureUrl!))
+                                  : null,
+                              child: post.author.profilePictureUrl == null ? Text(post.author.name[0].toUpperCase()) : null,
+                            ),
                           ),
                           const SizedBox(width: 12),
+                          
+                          // 2. NAMA & KATEGORI
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(post.author.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                                Text(_calculateTimeAgo(post.createdAt), style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                                // NAMA (KLIK UNTUK LIHAT PROFIL)
+                                InkWell(
+                                  onTap: () => _navigateToProfile(post.author.id),
+                                  child: Text(
+                                    post.author.name, 
+                                    style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold, fontSize: 16)
+                                  ),
+                                ),
+                                Text(post.category.name, style: TextStyle(color: textSecondary, fontSize: 13)),
                               ],
                             ),
                           ),
-                          // Badge Kategori
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[100],
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.grey[300]!),
-                            ),
-                            child: Text(post.category.name, style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.black87)),
-                          ),
                         ],
                       ),
+                      // ---------------------------------------------
                       
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 12),
                       
-                      // --- KONTEN POSTINGAN ---
-                      Text(post.title, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      if(post.title.isNotEmpty) Text(post.title, style: TextStyle(color: textPrimary, fontSize: 18, fontWeight: FontWeight.w700)),
                       const SizedBox(height: 8),
-                      Text(post.content, style: const TextStyle(fontSize: 14, height: 1.5, color: Colors.black87)),
-                      const SizedBox(height: 16),
+                      Text(post.content, style: TextStyle(color: textPrimary, fontSize: 16, height: 1.5)),
+                      const SizedBox(height: 12),
 
-                      // --- TAGS ---
-                      if (post.tags != null && post.tags!.isNotEmpty)
-                        Wrap(
-                          spacing: 8.0,
-                          runSpacing: 8.0,
-                          children: post.tags!.map((tag) {
-                            return Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                              decoration: BoxDecoration(
-                                color: Colors.blue[50],
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Text(
-                                "#${tag.name}", 
-                                style: TextStyle(color: Colors.blue[800], fontSize: 12, fontWeight: FontWeight.w600)
-                              ),
-                            );
-                          }).toList(),
-                        ),
-                      
-                      const SizedBox(height: 20),
-
-                      // --- STATS ROW (Like & Comment) ---
-                      Row(
-                        children: [
-                          InkWell(
-                            onTap: _isLiking ? null : () => _toggleLikePost(userHasLiked),
-                            borderRadius: BorderRadius.circular(5),
-                            child: Padding(
-                              padding: const EdgeInsets.all(4.0),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    userHasLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined, 
-                                    color: userHasLiked ? Colors.blue : Colors.grey[600],
-                                    size: 20
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    "$_totalLikesFromFunction Suka", 
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold, 
-                                      color: userHasLiked ? Colors.blue : Colors.grey[700]
-                                    )
-                                  ),
-                                ],
-                              ),
+                      if (post.mediaUrl != null)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(12),
+                            child: Image.network(
+                              _fixImageUrl(post.mediaUrl!),
+                              fit: BoxFit.cover,
+                              errorBuilder: (context, error, stackTrace) => const SizedBox(),
                             ),
                           ),
-                          const SizedBox(width: 24),
-                          Row(
-                            children: [
-                              Icon(Icons.chat_bubble_outline, color: Colors.grey[600], size: 20),
-                              const SizedBox(width: 6),
-                              Text("$_currentTotalComments Komentar", style: TextStyle(color: Colors.grey[700])),
-                            ],
-                          ),
-                        ],
-                      ),
-                      
-                      const SizedBox(height: 10),
-                      const Divider(),
-                      const SizedBox(height: 10),
+                        ),
 
-                      // --- HEADER KOMENTAR ---
-                      Text('Komentar', style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
+                      if (post.tags != null && post.tags!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: 16.0),
+                          child: Wrap(
+                            spacing: 8.0,
+                            runSpacing: 4.0,
+                            children: post.tags!.map((tag) {
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                decoration: BoxDecoration(
+                                  color: Colors.blue.shade50,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: Colors.blue.shade100)
+                                ),
+                                child: Text("#${tag.name}", style: TextStyle(color: Colors.blue.shade800, fontSize: 12, fontWeight: FontWeight.bold)),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4.0),
+                        child: Row(
+                          children: [
+                            Text("${DateTime.parse(post.createdAt).day}/${DateTime.parse(post.createdAt).month}/${DateTime.parse(post.createdAt).year}", style: TextStyle(color: textSecondary, fontSize: 12)),
+                            const Spacer(),
+                            Icon(Icons.bar_chart_rounded, size: 16, color: textSecondary),
+                            Text(" ${post.views} Views", style: TextStyle(color: textSecondary, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                      Divider(height: 24, color: theme.dividerColor),
+
+                      Row(children: [
+                         IconButton(
+                            icon: Icon(userHasLiked ? Icons.thumb_up : Icons.thumb_up_alt_outlined, color: userHasLiked ? Colors.blue : Colors.grey),
+                            onPressed: _isLiking ? null : () => _toggleLikePost(userHasLiked),
+                          ),
+                         Text('$_totalLikesFromFunction Suka', style: TextStyle(fontWeight: FontWeight.bold, color: textPrimary)),
+                         const SizedBox(width: 24),
+                         const Icon(Icons.comment_outlined, color: Colors.grey),
+                         const SizedBox(width: 4),
+                         Text('$_currentTotalComments Komentar', style: TextStyle(color: textPrimary)),
+                      ]),
+                      const Divider(height: 32),
+                      
+                      Text('Komentar', style: TextStyle(color: textPrimary, fontSize: 16, fontWeight: FontWeight.bold)),
                       const SizedBox(height: 16),
                       
+                      // LIST KOMENTAR
                       if (_structuredComments.isEmpty)
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: Text("Belum ada komentar.", style: TextStyle(color: Colors.grey[500])),
-                          ),
-                        )
+                        Text("Belum ada komentar.", style: TextStyle(color: textSecondary))
                       else
                          Column(
                            children: _structuredComments.map((comment) => 
@@ -431,57 +455,49 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
                                onReply: _startReplying,
                                onDelete: _deleteComment,
                                onRefresh: () => _fetchAndStructureComments(post.id),
+                               theme: theme,
+                               // KIRIM MAP KE WIDGET ANAK
+                               replyingMap: _replyingToUserMap, 
                              )
                            ).toList(),
                          ),
-                      
-                      // Spacer agar tidak tertutup input field
-                      const SizedBox(height: 60),
                     ],
                   ),
                 ),
-                
-                // --- INPUT KOMENTAR (Sticky Bottom) ---
+                // Input Area
                 Container(
-                  decoration: BoxDecoration(
-                    color: Colors.white, 
-                    boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]
-                  ),
+                  decoration: BoxDecoration(color: cardColor, boxShadow: [BoxShadow(color: Colors.black12, blurRadius: 4, offset: const Offset(0, -2))]),
                   child: Column(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
                       if (_replyingToName != null)
                         Container(
-                          width: double.infinity,
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                          color: Colors.blue[50],
+                          color: isDark ? Colors.grey[800] : Colors.grey[200],
                           child: Row(children: [
-                            const Icon(Icons.reply, size: 16, color: Colors.blue),
+                            Icon(Icons.reply, size: 16, color: primaryColor),
                             const SizedBox(width: 8),
-                            Expanded(child: Text("Membalas $_replyingToName...", style: TextStyle(color: Colors.blue[800], fontSize: 12))),
-                            GestureDetector(onTap: _cancelReply, child: const Icon(Icons.close, size: 18, color: Colors.blue))
+                            Expanded(child: Text("Membalas $_replyingToName...", style: TextStyle(color: textPrimary, fontWeight: FontWeight.bold))),
+                            GestureDetector(onTap: _cancelReply, child: const Icon(Icons.close, size: 20, color: Colors.red))
                           ]),
                         ),
                       Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+                        padding: const EdgeInsets.all(8.0),
                         child: Row(children: [
                           Expanded(child: TextField(
                             controller: _commentController,
                             focusNode: _commentFocusNode,
+                            style: TextStyle(color: textPrimary),
                             decoration: InputDecoration(
                               hintText: 'Tulis komentar...',
-                              hintStyle: TextStyle(color: Colors.grey[400]),
+                              hintStyle: TextStyle(color: textSecondary),
+                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(24)),
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               filled: true,
-                              fillColor: Colors.grey[100],
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                              fillColor: isDark ? Colors.grey[900] : Colors.grey[50],
                             ),
                           )),
                           const SizedBox(width: 8),
-                          CircleAvatar(
-                            backgroundColor: Colors.blue,
-                            child: IconButton(icon: const Icon(Icons.send, color: Colors.white, size: 18), onPressed: _addComment),
-                          ),
+                          IconButton(icon: Icon(Icons.send, color: primaryColor), onPressed: _addComment),
                         ]),
                       ),
                     ],
@@ -496,13 +512,14 @@ class _PostDetailScreenState extends State<PostDetailScreen> {
   }
 }
 
-// --- WIDGET KOMENTAR ---
 class CommentCard extends StatelessWidget {
   final CommentDetail comment;
   final User? currentUser;
   final Function(int, String) onReply;
   final Function(int) onDelete;
   final VoidCallback onRefresh;
+  final ThemeData theme;
+  final Map<int, String>? replyingMap; // TERIMA MAP DARI PARENT
 
   const CommentCard({
     Key? key, 
@@ -511,60 +528,54 @@ class CommentCard extends StatelessWidget {
     required this.onReply, 
     required this.onDelete,
     required this.onRefresh,
+    required this.theme,
+    this.replyingMap,
   }) : super(key: key);
 
-  Future<void> _toggleLike(BuildContext context) async {
+  Future<void> _toggleLike() async {
     await ApiServices().toggleCommentLike(comment.commentId);
     onRefresh();
   }
 
-  void _showReportDialog(BuildContext context) {
-    // ... logic report sama seperti sebelumnya ...
-  }
-
-  // Helper Warna Avatar
-  Color _getAvatarColor(String name) {
-    if (name.isEmpty) return Colors.blue;
-    return Colors.primaries[name.codeUnitAt(0) % Colors.primaries.length];
-  }
-
   @override
   Widget build(BuildContext context) {
+    final textPrimary = theme.textTheme.bodyLarge?.color ?? Colors.black;
+    final textSecondary = theme.textTheme.bodyMedium?.color ?? Colors.grey;
+    final primaryColor = theme.primaryColor;
+
     bool canDelete = false;
-    bool isOwner = false;
     if (currentUser != null) {
-      isOwner = currentUser!.id == comment.commenterId;
-      if (isOwner || currentUser!.isAdmin) canDelete = true;
+      if (currentUser!.id == comment.commenterId || currentUser!.isAdmin) canDelete = true;
+    }
+
+    // CEK APAKAH KOMENTAR INI MEMBALAS SESEORANG
+    String? replyName;
+    if (replyingMap != null && replyingMap!.containsKey(comment.commentId)) {
+      replyName = replyingMap![comment.commentId];
     }
 
     return Column(
       children: [
+        // --- TAMPILAN KOMENTAR UTAMA ---
         Padding(
-          padding: const EdgeInsets.only(bottom: 12.0),
+          padding: const EdgeInsets.only(bottom: 8.0),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CircleAvatar(
-                radius: 16,
-                backgroundColor: _getAvatarColor(comment.commenterName),
-                child: Text(comment.commenterName[0].toUpperCase(), style: const TextStyle(fontSize: 12, color: Colors.white)),
+                radius: 16, 
+                child: Text(comment.commenterName.isNotEmpty ? comment.commenterName[0].toUpperCase() : "?", style: const TextStyle(fontSize: 12))
               ),
-              const SizedBox(width: 10),
+              const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Bubble Komentar
                     Container(
-                      padding: const EdgeInsets.all(12),
+                      padding: const EdgeInsets.all(10),
                       decoration: BoxDecoration(
-                        color: Colors.grey[50], // Abu sangat muda
-                        borderRadius: const BorderRadius.only(
-                          topRight: Radius.circular(12),
-                          bottomLeft: Radius.circular(12),
-                          bottomRight: Radius.circular(12),
-                        ),
-                        border: Border.all(color: Colors.grey[200]!)
+                        color: theme.brightness == Brightness.dark ? Colors.grey[800] : Colors.grey[100], 
+                        borderRadius: BorderRadius.circular(12)
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -572,66 +583,52 @@ class CommentCard extends StatelessWidget {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text(comment.commenterName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                              
-                              // Menu Kebab Kecil untuk Report/Delete
-                              SizedBox(
-                                height: 20,
-                                width: 20,
-                                child: PopupMenuButton<String>(
-                                  padding: EdgeInsets.zero,
-                                  icon: const Icon(Icons.more_horiz, size: 16, color: Colors.grey),
-                                  onSelected: (val) {
-                                    if (val == 'delete') onDelete(comment.commentId);
-                                  },
-                                  itemBuilder: (context) => [
-                                    if (canDelete)
-                                      const PopupMenuItem(value: 'delete', child: Text("Hapus", style: TextStyle(color: Colors.red, fontSize: 12))),
-                                    if (!isOwner)
-                                      const PopupMenuItem(value: 'report', child: Text("Laporkan", style: TextStyle(fontSize: 12))),
-                                  ],
-                                ),
-                              ),
+                              Text(comment.commenterName, style: TextStyle(fontWeight: FontWeight.bold, color: textPrimary)),
+                              if (canDelete)
+                                GestureDetector(
+                                  onTap: () => onDelete(comment.commentId),
+                                  child: const Icon(Icons.delete_outline, size: 16, color: Colors.red),
+                                )
                             ],
                           ),
-                          const SizedBox(height: 4),
-                          Text(comment.commentContent, style: const TextStyle(fontSize: 13, color: Colors.black87)),
-                        ],
-                      ),
-                    ),
-                    
-                    // Footer Komentar (Like, Reply, Time)
-                    Padding(
-                      padding: const EdgeInsets.only(left: 4.0, top: 6.0),
-                      child: Row(
-                        children: [
-                          // Tanggal
-                          Text(
-                            '${comment.commentCreatedAt.day}/${comment.commentCreatedAt.month}', 
-                            style: TextStyle(fontSize: 10, color: Colors.grey[500])
-                          ),
-                          const SizedBox(width: 12),
                           
-                          // Tombol Balas
-                          InkWell(
-                            onTap: () => onReply(comment.commentId, comment.commenterName),
-                            child: const Text("Balas", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black54)),
-                          ),
-                          
-                          const Spacer(),
-
-                          // Like Komentar
-                          InkWell(
-                            onTap: () => _toggleLike(context),
-                            child: Row(
+                          // --- TAMPILKAN "Membalas @Nama" JIKA ADA ---
+                          RichText(
+                            text: TextSpan(
+                              style: TextStyle(fontSize: 14, color: textPrimary, fontFamily: 'Roboto'),
                               children: [
-                                Icon(Icons.favorite, size: 12, color: comment.totalLikes > 0 ? Colors.pinkAccent : Colors.grey[300]),
-                                const SizedBox(width: 4),
-                                if (comment.totalLikes > 0)
-                                  Text("${comment.totalLikes}", style: const TextStyle(fontSize: 10, color: Colors.grey)),
+                                if (replyName != null)
+                                  TextSpan(
+                                    text: "@$replyName ", 
+                                    style: TextStyle(color: primaryColor, fontWeight: FontWeight.bold)
+                                  ),
+                                TextSpan(text: comment.commentContent),
                               ],
                             ),
                           ),
+                          // ----------------------------------------
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.only(left: 8.0, top: 4.0),
+                      child: Row(
+                        children: [
+                          Text('${comment.commentCreatedAt.day}/${comment.commentCreatedAt.month}', style: TextStyle(fontSize: 11, color: textSecondary)),
+                          const SizedBox(width: 12),
+                          InkWell(
+                            onTap: () => onReply(comment.commentId, comment.commenterName),
+                            child: const Text("Balas", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                          ),
+                          const SizedBox(width: 12),
+                          InkWell(
+                            onTap: _toggleLike,
+                            child: Row(children: [
+                              const Icon(Icons.favorite, size: 12, color: Colors.pinkAccent),
+                              const SizedBox(width: 2),
+                              Text("${comment.totalLikes}", style: const TextStyle(fontSize: 12)),
+                            ]),
+                          )
                         ],
                       ),
                     ),
@@ -641,19 +638,21 @@ class CommentCard extends StatelessWidget {
             ],
           ),
         ),
-        
-        // Render Replies (Recursion)
+
+        // --- RENDER BALASAN (FLAT LEVEL 2) ---
         if (comment.replies.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(left: 40.0), // Indentasi untuk balasan
+            padding: const EdgeInsets.only(left: 40.0), // Indentasi untuk anak
             child: Column(
               children: comment.replies.map((reply) => 
                 CommentCard(
                   comment: reply, 
                   currentUser: currentUser, 
                   onReply: onReply, 
-                  onDelete: onDelete,
-                  onRefresh: onRefresh,
+                  onDelete: onDelete, 
+                  onRefresh: onRefresh, 
+                  theme: theme,
+                  replyingMap: replyingMap, // Teruskan Map ke anak
                 )
               ).toList()
             ),

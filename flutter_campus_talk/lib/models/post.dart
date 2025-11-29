@@ -9,6 +9,9 @@ class Post {
   final Category category;
   final String title;
   final String content;
+  final int views;
+  final String? mediaUrl; // Field baru
+  final String? mediaType;
   final int totalLikes; // Ini akan berasal dari 'likes_count' (Eloquent)
   final int totalComments;
   final String createdAt;
@@ -22,6 +25,9 @@ class Post {
     required this.category,
     required this.title,
     required this.content,
+    required this.views,
+    this.mediaUrl,
+    this.mediaType,
     this.totalLikes = 0,
     this.totalComments = 0,
     required this.createdAt,
@@ -65,6 +71,9 @@ class Post {
       category: parsedCategory,
       title: json['title'] as String,
       content: json['content'] as String,
+      views: json['views'] ?? 0,
+      mediaUrl: json['media_url'],
+      mediaType: json['media_type'],
       totalLikes: json['likes_count'] as int? ?? 0, // Dari withCount('likes')
       totalComments: json['comments_count'] as int? ?? 0,
       createdAt: json['created_at'] as String,

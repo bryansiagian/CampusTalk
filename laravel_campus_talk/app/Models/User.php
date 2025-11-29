@@ -15,10 +15,11 @@ class User extends Authenticatable
         'role_id',
         'name',
         'email',
+        'profile_picture',
         'password',
         'is_approved',
         'nim',
-        'prodi',     
+        'prodi_id',
         'angkatan',
     ];
 
@@ -66,4 +67,20 @@ class User extends Authenticatable
     {
         return $this->role->name === 'admin';
     }
+
+    public function prodi()
+    {
+        return $this->belongsTo(Prodi::class);
+    }
+
+    // Accessor untuk mendapatkan URL lengkap
+    public function getProfilePictureUrlAttribute()
+    {
+        if ($this->profile_picture) {
+            return asset('storage/' . $this->profile_picture);
+        }
+        return null;
+    }
+
+    protected $appends = ['profile_picture_url'];
 }

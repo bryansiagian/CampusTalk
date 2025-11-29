@@ -14,6 +14,9 @@ class Post extends Model
         'category_id',
         'title',
         'content',
+        'media_path', // <--- Tambahkan
+        'media_type',
+        'views',
     ];
 
     // Relasi: Post dimiliki oleh satu User (penulis)
@@ -57,4 +60,14 @@ class Post extends Model
     {
         return $this->comments()->count();
     }
+
+    public function getMediaUrlAttribute()
+    {
+        if ($this->media_path) {
+            return asset('storage/' . $this->media_path);
+        }
+        return null;
+    }
+
+    protected $appends = ['media_url'];
 }

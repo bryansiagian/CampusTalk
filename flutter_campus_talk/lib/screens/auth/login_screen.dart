@@ -3,8 +3,8 @@ import 'package:flutter_spinkit/flutter_spinkit.dart';
 import '../../services/api_services.dart';
 
 // Import Screen Tujuan
-import '../main_navigation_screen.dart'; // Untuk User Biasa
-import '../admin/admin_dashboard_screen.dart'; // Untuk Admin
+import '../main_navigation_screen.dart'; 
+import '../admin/admin_dashboard_screen.dart'; 
 import 'register_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -20,8 +20,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final ApiServices _apiService = ApiServices();
   
   bool _isLoading = false;
-  bool _obscureText = true; // Untuk toggle password visibility
-  bool _rememberMe = false; // Untuk checkbox ingat saya
+  bool _obscureText = true; 
+  bool _rememberMe = false; 
 
   Future<void> _login() async {
     if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
@@ -71,11 +71,29 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Warna Biru Utama sesuai desain (Royal Blue)
-    final Color mainBlueColor = const Color(0xFF1855F4); 
+    // --- AMBIL TEMA DARI PROVIDER/CONTEXT ---
+    final theme = Theme.of(context);
+    final isDark = theme.brightness == Brightness.dark;
+
+    // Warna Dinamis
+    // Jika Dark Mode: Background Hitam/Abu Gelap. Jika Light: Biru Royal.
+    final Color backgroundColor = isDark ? const Color(0xFF121212) : const Color(0xFF1855F4);
     
+    // Warna Card
+    final Color cardColor = isDark ? const Color(0xFF1E1E1E) : Colors.white;
+    
+    // Warna Teks di dalam Card
+    final Color textColor = isDark ? Colors.white : Colors.black87;
+    final Color subTextColor = isDark ? Colors.grey[400]! : Colors.grey;
+
+    // Warna Input Field
+    final Color inputFillColor = isDark ? const Color(0xFF2C2C2C) : const Color(0xFFF3F4F6);
+
+    // Warna Tombol & Link (Tetap Biru agar kontras, atau sesuaikan primaryColor)
+    final Color accentColor = const Color(0xFF1855F4);
+
     return Scaffold(
-      backgroundColor: mainBlueColor, // Background Biru Penuh
+      backgroundColor: backgroundColor, 
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -83,36 +101,26 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // --- HEADER DI LUAR KARTU ---
+                // --- HEADER ---
+                const Icon(Icons.school, size: 60, color: Colors.white), 
+                const SizedBox(height: 16),
                 const Text(
                   'CampusTalk',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.white,
-                  ),
-                ),
-                Image.asset(
-                  'assets/images/logos/kampus.jpeg', // Pastikan path file sesuai dengan folder aset Anda
-                  height: 60,               // Atur tinggi logo
-                  width: 80,                // Atur lebar logo (opsional)
+                  style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Colors.white),
                 ),
                 const SizedBox(height: 8),
                 const Text(
                   'Forum Diskusi Mahasiswa IT Del',
-                  style: TextStyle(
-                    fontSize: 16,
-                    color: Colors.white70,
-                  ),
+                  style: TextStyle(fontSize: 16, color: Colors.white70),
                 ),
                 const SizedBox(height: 32),
 
-                // --- CARD PUTIH ---
+                // --- CARD LOGIN ---
                 Container(
                   padding: const EdgeInsets.all(24.0),
                   decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20), // Sudut melengkung
+                    color: cardColor,
+                    borderRadius: BorderRadius.circular(20),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withOpacity(0.1),
@@ -124,53 +132,53 @@ class _LoginScreenState extends State<LoginScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Judul Card
-                      const Center(
+                      Center(
                         child: Text(
                           'Selamat Datang',
-                          style: TextStyle(
-                            fontSize: 22,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black87,
-                          ),
+                          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
                         ),
                       ),
                       const SizedBox(height: 8),
-                      const Center(
+                      Center(
                         child: Text(
                           'Masuk ke akun Anda',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey,
-                          ),
+                          style: TextStyle(fontSize: 14, color: subTextColor),
                         ),
                       ),
                       const SizedBox(height: 32),
 
                       // Input Email
-                      _buildLabel('Email Kampus'),
-                      const SizedBox(height: 8),
+                      _buildLabel('Email Kampus', textColor),
                       TextField(
                         controller: _emailController,
                         keyboardType: TextInputType.emailAddress,
+                        style: TextStyle(color: textColor), // Teks input user
                         decoration: _buildInputDecoration(
                           hintText: 'nama@students.del.ac.id',
+                          icon: Icons.email_outlined,
+                          fillColor: inputFillColor,
+                          hintColor: subTextColor,
+                          iconColor: subTextColor,
                         ),
                       ),
                       const SizedBox(height: 16),
 
                       // Input Password
-                      _buildLabel('Kata Sandi'),
-                      const SizedBox(height: 8),
+                      _buildLabel('Kata Sandi', textColor),
                       TextField(
                         controller: _passwordController,
                         obscureText: _obscureText,
+                        style: TextStyle(color: textColor),
                         decoration: _buildInputDecoration(
                           hintText: 'Masukkan kata sandi',
+                          icon: Icons.lock_outline,
+                          fillColor: inputFillColor,
+                          hintColor: subTextColor,
+                          iconColor: subTextColor,
                           suffixIcon: IconButton(
                             icon: Icon(
                               _obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
-                              color: Colors.grey,
+                              color: subTextColor,
                             ),
                             onPressed: () {
                               setState(() {
@@ -182,7 +190,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
 
                       // Row: Ingat Saya & Lupa Password
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 12),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
@@ -193,7 +201,10 @@ class _LoginScreenState extends State<LoginScreen> {
                                 width: 24,
                                 child: Checkbox(
                                   value: _rememberMe,
-                                  activeColor: mainBlueColor,
+                                  activeColor: accentColor,
+                                  checkColor: Colors.white,
+                                  side: BorderSide(color: subTextColor),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                                   onChanged: (val) {
                                     setState(() {
                                       _rememberMe = val ?? false;
@@ -202,19 +213,18 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ),
                               const SizedBox(width: 8),
-                              const Text('Ingat saya', style: TextStyle(fontSize: 13)),
+                              Text('Ingat saya', style: TextStyle(fontSize: 13, color: textColor)),
                             ],
                           ),
                           TextButton(
                             onPressed: () {
-                              // Aksi Lupa Password
                               ScaffoldMessenger.of(context).showSnackBar(
                                 const SnackBar(content: Text('Fitur reset password belum tersedia')),
                               );
                             },
                             child: Text(
                               'Lupa password?',
-                              style: TextStyle(color: mainBlueColor, fontSize: 13),
+                              style: TextStyle(color: accentColor, fontSize: 13, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
@@ -224,26 +234,22 @@ class _LoginScreenState extends State<LoginScreen> {
 
                       // Tombol Login
                       _isLoading
-                          ? Center(child: SpinKitWave(color: mainBlueColor, size: 30.0))
+                          ? Center(child: SpinKitThreeBounce(color: accentColor, size: 30.0))
                           : SizedBox(
                               width: double.infinity,
                               height: 50,
                               child: ElevatedButton(
                                 onPressed: _login,
                                 style: ElevatedButton.styleFrom(
-                                  backgroundColor: mainBlueColor,
+                                  backgroundColor: accentColor,
                                   shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(8),
+                                    borderRadius: BorderRadius.circular(12),
                                   ),
                                   elevation: 0,
                                 ),
                                 child: const Text(
                                   'Masuk',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.bold,
-                                    color: Colors.white,
-                                  ),
+                                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white),
                                 ),
                               ),
                             ),
@@ -254,7 +260,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          const Text("Belum punya akun? ", style: TextStyle(color: Colors.black54)),
+                          Text("Belum punya akun? ", style: TextStyle(color: subTextColor)),
                           GestureDetector(
                             onTap: () {
                               Navigator.of(context).push(
@@ -263,25 +269,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                             child: Text(
                               "Daftar sekarang",
-                              style: TextStyle(
-                                color: mainBlueColor,
-                                fontWeight: FontWeight.bold,
-                              ),
+                              style: TextStyle(color: accentColor, fontWeight: FontWeight.bold),
                             ),
                           ),
                         ],
                       ),
-                      
-                      // Demo Text (Opsional seperti di gambar)
-                      const SizedBox(height: 16),
-                      Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                            color: Colors.grey[50],
-                            borderRadius: BorderRadius.circular(8)
-                        ),
-                      )
                     ],
                   ),
                 ),
@@ -293,38 +285,43 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Widget Helper untuk Label di atas Input
-  Widget _buildLabel(String text) {
-    return Text(
-      text,
-      style: const TextStyle(
-        fontWeight: FontWeight.w600,
-        fontSize: 14,
-        color: Colors.black87,
+  Widget _buildLabel(String text, Color color) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Text(
+        text,
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14, color: color),
       ),
     );
   }
 
-  // Helper untuk Style Input Field (Background abu-abu, tanpa border outline)
-  InputDecoration _buildInputDecoration({required String hintText, Widget? suffixIcon}) {
+  InputDecoration _buildInputDecoration({
+    required String hintText, 
+    required Color fillColor,
+    required Color hintColor,
+    required Color iconColor,
+    IconData? icon,
+    Widget? suffixIcon,
+  }) {
     return InputDecoration(
       hintText: hintText,
-      hintStyle: const TextStyle(color: Colors.grey, fontSize: 14),
+      hintStyle: TextStyle(color: hintColor, fontSize: 14),
       filled: true,
-      fillColor: const Color(0xFFF3F4F6), // Abu-abu muda
+      fillColor: fillColor,
+      prefixIcon: icon != null ? Icon(icon, color: iconColor, size: 20) : null,
       suffixIcon: suffixIcon,
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
       border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: BorderSide.none, // Hilangkan garis border
+        borderRadius: BorderRadius.circular(12),
+        borderSide: BorderSide.none,
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: BorderRadius.circular(12),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(8),
-        borderSide: const BorderSide(color: Color(0xFF1855F4), width: 1), // Sedikit biru saat aktif
+        borderRadius: BorderRadius.circular(12),
+        borderSide: const BorderSide(color: Color(0xFF1855F4), width: 1.5),
       ),
     );
   }

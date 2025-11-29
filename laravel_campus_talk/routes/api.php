@@ -12,6 +12,8 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\AdminController;
 use App\Http\Controllers\CommentLikeController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\UserController;
+use App\Http\Controllers\ProdiController;
 
 
 use App\Models\User; // Tambahkan ini
@@ -26,6 +28,9 @@ use App\Models\User; // Tambahkan ini
 Route::post('/register', [AuthController::class, 'register']);
 Route::post('/login', [AuthController::class, 'login'])->name('login');
 
+// Prodi
+Route::get('/prodis', [ProdiController::class, 'index']);
+
 // Kategori & Tag
 Route::get('/categories', [CategoryController::class, 'index']);
 Route::get('/tags', [TagController::class, 'index']);
@@ -37,8 +42,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // --- Rute Baru untuk Profil Pengguna ---
     // Route untuk mendapatkan informasi user yang sedang login
     Route::get('/user', function (Request $request) {
-        return $request->user()->load('role');
+        return $request->user()->load('role', 'prodi');
     });
+
+    Route::post('/user/photo', [AuthController::class, 'updateProfilePicture']);
+    Route::get('/users/{id}', [UserController::class, 'show']);
 
     // Route untuk mendapatkan postingan yang dibuat oleh user tertentu
     // {user} akan otomatis di-resolve ke instance App\Models\User berdasarkan ID

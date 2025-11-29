@@ -1,9 +1,11 @@
 // lib/services/api_services.dart
 import 'dart:convert';
+import 'dart:io'; // <--- Pastikan baris ini ada!
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../models/user.dart';
+import '../models/prodi.dart';
 import '../models/post.dart';
 import '../models/comment.dart';
 import '../models/comment_detail.dart';
@@ -52,29 +54,75 @@ class ApiServices {
     }
   }
 
-  Future<bool> register(String name, String email, String password, String passwordConfirmation, String nim, String prodi, String angkatan) async {
-    final response = await http.post(
-      Uri.parse('$_baseUrl/register'),
-      headers: await _getHeaders(requireAuth: false),
-      body: jsonEncode({
-        'name': name,
-        'email': email,
-        'password': password,
-        'password_confirmation': passwordConfirmation,
-        'nim': nim,
-        'prodi': prodi,
-        'angkatan': angkatan,
-      }),
-    );
+  Future<bool> register(
+    String name,
+    String email,
+    String password,
+    String passwordConfirmation,
+    String nim,
+    int prodiId,
+    String angkatan,
+    File? profileImage, // <--- Parameter Baru (Foto)
+  ) async {
+    var uri = Uri.parse('$_baseUrl/register');
+    var request = http.MultipartRequest('POST', uri);
 
-    if (response.statusCode == 201) {
-      return true; // Sukses, tapi belum login
-    } else {
-      print('Registrasi Gagal: ${response.body}');
-      final body = jsonDecode(response.body);
-      throw Exception(jsonDecode(response.body)['message'] ?? 'Registrasi gagal.');
+    // Header (Tanpa Auth karena register publik)
+    request.headers['Accept'] = 'application/json';
+
+    // Data Teks
+    request.fields['name'] = name;
+    request.fields['email'] = email;
+    request.fields['password'] = password;
+    request.fields['password_confirmation'] = passwordConfirmation;
+    request.fields['nim'] = nim;
+    request.fields['prodi_id'] = prodiId.toString();
+    request.fields['angkatan'] = angkatan;
+
+    // Data File (Jika user memilih foto)
+    if (profileImage != null) {
+      request.files.add(await http.MultipartFile.fromPath(
+        'profile_picture', // Pastikan nama field di Laravel 'profile_picture' atau sesuaikan
+        profileImage.path,
+      ));
+    }
+
+    try {
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        return true;
+      } else {
+        print('Registrasi Gagal: ${response.body}');
+        final body = jsonDecode(response.body);
+        throw Exception(body['message'] ?? 'Registrasi gagal.');
+      }
+    } catch (e) {
+      throw Exception("Error register: $e");
     }
   }
+
+   // AMBIL DAFTAR PRODI
+  Future<List<Prodi>> getProdis() async {
+    // Gunakan 10.0.2.2 untuk emulator
+    final response = await http.get(Uri.parse('$_baseUrl/prodis')); 
+    
+    if (response.statusCode == 200) {
+      // Decode Body
+      final dynamic body = jsonDecode(response.body);
+      
+      // DEBUG: Lihat apa yang diterima Flutter
+      print("Raw API Response: $body"); 
+
+      // Laravel resource biasanya membungkus list dalam key "data"
+      final List data = body['data']; 
+      
+      return data.map((e) => Prodi.fromJson(e)).toList();
+    }
+    return [];
+  }
+
 
   // --- ADMIN USER MANAGEMENT ---
   Future<List<User>> getPendingUsers() async {
@@ -560,5 +608,96 @@ class ApiServices {
   // Admin: Dismiss Report
   Future<void> dismissReport(int id) async {
     await http.delete(Uri.parse('$_baseUrl/admin/reports/$id'), headers: await _getHeaders());
+  }
+
+  // UPDATE PROFIL PICTURE
+  Future<User?> updateProfilePicture(File imageFile) async {
+    String? token = await _getToken();
+    var uri = Uri.parse('$_baseUrl/user/photo');
+    var request = http.MultipartRequest('POST', uri);
+
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+
+    // Attach File
+    request.files.add(await http.MultipartFile.fromPath(
+      'image', 
+      imageFile.path,
+    ));
+
+    try {
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return User.fromJson(data['user']);
+      } else {
+        print("Upload gagal: ${response.body}");
+        throw Exception("Gagal upload foto");
+      }
+    } catch (e) {
+      throw Exception("Error uploading image: $e");
+    }
+  }
+
+  // CREATE POST DENGAN GAMBAR
+  Future<Post?> createPostWithMedia(String title, String content, int categoryId, String tags, File? mediaFile) async {
+    String? token = await _getToken();
+    var uri = Uri.parse('$_baseUrl/posts');
+    var request = http.MultipartRequest('POST', uri);
+
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+
+    // Add Fields
+    request.fields['title'] = title;
+    request.fields['content'] = content;
+    request.fields['category_id'] = categoryId.toString();
+    request.fields['tags'] = tags;
+
+    // Add File (Jika ada)
+    if (mediaFile != null) {
+        // Cek apakah file benar-benar ada
+        if (await mediaFile.exists()) {
+            request.files.add(await http.MultipartFile.fromPath(
+                'media', 
+                mediaFile.path,
+            ));
+        } else {
+            print("File tidak ditemukan di path: ${mediaFile.path}");
+        }
+    }
+
+    try {
+      var streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 201) {
+        final data = jsonDecode(response.body);
+        return Post.fromJson(data['data']);
+      } else {
+        print("Create Post Gagal: ${response.body}");
+        throw Exception("Gagal membuat postingan: ${response.statusCode}");
+      }
+    } catch (e) {
+      throw Exception("Koneksi timeout atau error: $e");
+    }
+  }
+
+  // Ambil profil user lain berdasarkan ID
+  Future<User?> getUserById(int userId) async {
+    final response = await http.get(
+      Uri.parse('$_baseUrl/users/$userId'),
+      headers: await _getHeaders(),
+    );
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
+      return User.fromJson(data['data']);
+    } else {
+      print('Gagal ambil user $userId: ${response.body}');
+      return null;
+    }
   }
 }

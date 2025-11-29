@@ -65,21 +65,27 @@ class PostController extends Controller
             return response()->json(['message' => 'Postingan tidak ditemukan'], 404);
         }
 
-        // --- Panggil Fungsi (Stored Procedure) dari PostgreSQL ---
-        // Kita menggunakan DB::selectOne() untuk mengeksekusi fungsi dan mendapatkan satu baris hasil.
-        // Tanda '?' akan diganti dengan nilai dari array kedua.
+        // --- LOGIKA VIEW COUNT (PERBAIKAN) ---
+        // Gunakan IP jika user belum login (untuk menghitung view tamu juga jika perlu)
+        $userId = auth()->guard('sanctum')->check() ? auth()->guard('sanctum')->id() : request()->ip();
+        $cacheKey = 'post_view_' . $post->id . '_' . $userId;
+
+        if (!\Illuminate\Support\Facades\Cache::has($cacheKey)) {
+            $post->increment('views');
+
+            // PERBAIKAN: Gunakan now()->addMinutes(60) agar kompatibel semua versi Laravel
+            \Illuminate\Support\Facades\Cache::put($cacheKey, true, now()->addMinutes(60));
+        }
+        // -------------------------------------
+
+        // ... sisa kode like count dari function DB ...
         $result = DB::selectOne("SELECT public.get_post_total_likes(?) AS total_likes_from_function", [$post->id]);
-        $totalLikesFromFunction = $result->total_likes_from_function ?? 0; // Ambil hasilnya, default 0 jika null
-        // ------------------------------------------------------------------
+        $totalLikesFromFunction = $result->total_likes_from_function ?? 0;
 
         $post->is_liked_by_current_user = $post->likes()->where('user_id', auth()->id())->exists();
-        $post->total_likes_via_function = (int) $totalLikesFromFunction; // Tambahkan ke objek Post untuk respons
+        $post->total_likes_via_function = (int) $totalLikesFromFunction;
 
-        // Konversi model Post ke array terlebih dahulu
-        // (Ini sudah tidak diperlukan jika langsung memodifikasi objek $post seperti di atas)
-        $postData = $post->toArray();
-
-        return response()->json(['data' => $postData]);
+        return response()->json(['data' => $post]);
     }
 
     public function store(Request $request)
@@ -88,35 +94,48 @@ class PostController extends Controller
             'title' => 'required|string|max:255',
             'content' => 'required|string',
             'category_id' => 'required|exists:categories,id',
-            // Ubah validasi tags: Boleh array, isinya string (nama tag)
-            'tags' => 'nullable|string', // Format: "flutter, laravel, code"
+            'tags' => 'nullable|string',
+            // Validasi File: Gambar atau Video (Max 10MB)
+            'media' => 'nullable|file|mimes:jpeg,png,jpg,mp4,mov,avi|max:10240',
         ]);
 
         try {
             return DB::transaction(function () use ($request) {
+                // 1. Handle File Upload
+                $mediaPath = null;
+                $mediaType = null;
+
+                if ($request->hasFile('media')) {
+                    $file = $request->file('media');
+                    $path = $file->store('posts', 'public'); // Simpan di storage/app/public/posts
+                    $mediaPath = $path;
+
+                    // Cek tipe file (image atau video)
+                    $mime = $file->getMimeType();
+                    $mediaType = str_contains($mime, 'video') ? 'video' : 'image';
+                }
+
+                // 2. Buat Post
                 $post = Post::create([
                     'user_id' => auth()->id(),
                     'category_id' => $request->category_id,
                     'title' => $request->title,
                     'content' => $request->content,
+                    'media_path' => $mediaPath, // Simpan path
+                    'media_type' => $mediaType, // Simpan tipe
                 ]);
 
-                // LOGIKA BARU: Handle Tags Dinamis
+                // 3. Handle Tags
                 if ($request->has('tags') && $request->tags != null) {
-                    // 1. Pecah string berdasarkan koma (misal: "php, laravel" -> ["php", "laravel"])
                     $tagNames = explode(',', $request->tags);
                     $tagIds = [];
-
                     foreach ($tagNames as $name) {
-                        $name = trim($name); // Hapus spasi di awal/akhir
+                        $name = trim($name);
                         if (!empty($name)) {
-                            // 2. Cari Tag, kalau tidak ada BUAT BARU (firstOrCreate)
-                            $tag = Tag::firstOrCreate(['name' => $name]);
+                            $tag = \App\Models\Tag::firstOrCreate(['name' => $name]);
                             $tagIds[] = $tag->id;
                         }
                     }
-
-                    // 3. Hubungkan Tag ke Post
                     $post->tags()->sync($tagIds);
                 }
 
