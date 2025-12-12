@@ -36,12 +36,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchProfileData();
   }
 
-  // Helper URL untuk Emulator
+  final String _serverIp = '10.180.3.115'; 
+  final String _port = '8000';
+
   String _fixImageUrl(String url) {
-    if (url.startsWith('/')) return 'http://10.0.2.2:8000$url';
-    if (url.contains('localhost')) return url.replaceAll('localhost', '10.0.2.2');
-    if (url.contains('127.0.0.1')) return url.replaceAll('127.0.0.1', '10.0.2.2');
-    return url;
+    if (url.isEmpty) return "";
+    
+    // 1. Bersihkan spasi
+    url = url.trim();
+
+    // 2. Jika URL sudah lengkap (http/https), kita hanya perlu mengganti Host-nya
+    if (url.startsWith('http')) {
+      return url
+          .replaceAll('localhost', _serverIp)
+          .replaceAll('127.0.0.1', _serverIp)
+          .replaceAll('10.0.2.2', _serverIp);
+    }
+
+    // 3. Menangani Path Relatif (Contoh: "/storage/posts/..." atau "posts/...")
+    
+    // Hapus slash di depan jika ada, agar penggabungan rapi
+    if (url.startsWith('/')) {
+      url = url.substring(1); 
+    }
+
+    // Cek apakah path sudah mengandung kata 'storage'
+    // Laravel biasanya menyimpan di 'public/posts/img.jpg', tapi diakses lewat 'storage/posts/img.jpg'
+    // Jika path dari DB adalah 'posts/img.jpg', kita harus tambahkan 'storage/'
+    if (!url.startsWith('storage')) {
+      url = 'storage/$url';
+    }
+
+    // Gabungkan menjadi URL utuh
+    final finalUrl = 'http://$_serverIp:$_port/$url';
+    
+    // DEBUG: Cek URL ini di terminal jika masih gagal
+    print("Fixed URL: $finalUrl"); 
+    
+    return finalUrl;
   }
 
   void _fetchProfileData() {
@@ -122,10 +154,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: theme.appBarTheme.backgroundColor,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: theme.iconTheme.color),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        // leading: IconButton(
+        //   icon: Icon(Icons.arrow_back, color: theme.iconTheme.color),
+        //   onPressed: () => Navigator.of(context).pop(),
+        // ),
         title: Text(
           _isMyProfile ? 'Profil Saya' : 'Profil Pengguna',
           style: theme.textTheme.titleLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
@@ -475,9 +507,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 if (themeProvider != null)
                   const Divider(height: 1, indent: 16, endIndent: 16),
                 
-                _buildSettingItem("Ubah Kata Sandi", theme, onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur segera hadir")));
-                }),
+                // _buildSettingItem("Ubah Kata Sandi", theme, onTap: () {
+                //     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur segera hadir")));
+                // }),
                 const Divider(height: 1, indent: 16, endIndent: 16),
                 _buildSettingItem("Keluar dari Akun", theme, isDestructive: true, onTap: _handleLogout),
               ],

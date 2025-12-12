@@ -14,7 +14,7 @@ import '../models/notification.dart';
 import '../models/tag.dart';
 
 class ApiServices {
-  static const String _baseUrl = 'http://10.0.2.2:8000/api';
+  static const String _baseUrl = 'http://10.180.3.115:8000/api';
 
   Future<String?> _getToken() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
@@ -47,7 +47,9 @@ class ApiServices {
       final data = jsonDecode(response.body);
       SharedPreferences prefs = await SharedPreferences.getInstance();
       await prefs.setString('token', data['token']);
-      return User.fromJson(data['user'] as Map<String, dynamic>); // Tambahkan cast
+      return User.fromJson(
+        data['user'] as Map<String, dynamic>,
+      ); // Tambahkan cast
     } else {
       print('Login Gagal: ${response.statusCode} - ${response.body}');
       throw Exception('Login gagal. Periksa email atau password Anda.');
@@ -81,10 +83,12 @@ class ApiServices {
 
     // Data File (Jika user memilih foto)
     if (profileImage != null) {
-      request.files.add(await http.MultipartFile.fromPath(
-        'profile_picture', // Pastikan nama field di Laravel 'profile_picture' atau sesuaikan
-        profileImage.path,
-      ));
+      request.files.add(
+        await http.MultipartFile.fromPath(
+          'profile_picture', // Pastikan nama field di Laravel 'profile_picture' atau sesuaikan
+          profileImage.path,
+        ),
+      );
     }
 
     try {
@@ -103,30 +107,32 @@ class ApiServices {
     }
   }
 
-   // AMBIL DAFTAR PRODI
+  // AMBIL DAFTAR PRODI
   Future<List<Prodi>> getProdis() async {
     // Gunakan 10.0.2.2 untuk emulator
-    final response = await http.get(Uri.parse('$_baseUrl/prodis')); 
-    
+    final response = await http.get(Uri.parse('$_baseUrl/prodis'));
+
     if (response.statusCode == 200) {
       // Decode Body
       final dynamic body = jsonDecode(response.body);
-      
+
       // DEBUG: Lihat apa yang diterima Flutter
-      print("Raw API Response: $body"); 
+      print("Raw API Response: $body");
 
       // Laravel resource biasanya membungkus list dalam key "data"
-      final List data = body['data']; 
-      
+      final List data = body['data'];
+
       return data.map((e) => Prodi.fromJson(e)).toList();
     }
     return [];
   }
 
-
   // --- ADMIN USER MANAGEMENT ---
   Future<List<User>> getPendingUsers() async {
-    final response = await http.get(Uri.parse('$_baseUrl/admin/pending-users'), headers: await _getHeaders());
+    final response = await http.get(
+      Uri.parse('$_baseUrl/admin/pending-users'),
+      headers: await _getHeaders(),
+    );
     if (response.statusCode == 200) {
       final List data = jsonDecode(response.body)['data'];
       return data.map((e) => User.fromJson(e)).toList();
@@ -135,12 +141,18 @@ class ApiServices {
   }
 
   Future<bool> approveUser(int userId) async {
-    final response = await http.put(Uri.parse('$_baseUrl/admin/users/$userId/approve'), headers: await _getHeaders());
+    final response = await http.put(
+      Uri.parse('$_baseUrl/admin/users/$userId/approve'),
+      headers: await _getHeaders(),
+    );
     return response.statusCode == 200;
   }
 
   Future<bool> rejectUser(int userId) async {
-    final response = await http.delete(Uri.parse('$_baseUrl/admin/users/$userId/reject'), headers: await _getHeaders());
+    final response = await http.delete(
+      Uri.parse('$_baseUrl/admin/users/$userId/reject'),
+      headers: await _getHeaders(),
+    );
     return response.statusCode == 200;
   }
 
@@ -158,7 +170,9 @@ class ApiServices {
         await prefs.remove('token'); // Hapus token lokal
       } else {
         // Error lain (misal 500 Server Error)
-        print('Logout Gagal di Server: ${response.statusCode} - ${response.body}');
+        print(
+          'Logout Gagal di Server: ${response.statusCode} - ${response.body}',
+        );
         // Tetap hapus token lokal agar user tidak terjebak
         SharedPreferences prefs = await SharedPreferences.getInstance();
         await prefs.remove('token');
@@ -174,7 +188,9 @@ class ApiServices {
   // --- Fungsi Baru: Mendapatkan data pengguna saat ini ---
   Future<User?> getCurrentUser() async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/user'), // Asumsi ada endpoint /user yang mengembalikan user terautentikasi
+      Uri.parse(
+        '$_baseUrl/user',
+      ), // Asumsi ada endpoint /user yang mengembalikan user terautentikasi
       headers: await _getHeaders(),
     );
 
@@ -182,7 +198,7 @@ class ApiServices {
       final data = jsonDecode(response.body);
       // Asumsi API mengembalikan user langsung, atau di dalam kunci 'data'
       if (data is Map<String, dynamic>) {
-         // Cek apakah user ada di dalam kunci 'data' atau langsung
+        // Cek apakah user ada di dalam kunci 'data' atau langsung
         if (data.containsKey('data') && data['data'] is Map<String, dynamic>) {
           return User.fromJson(data['data'] as Map<String, dynamic>);
         } else {
@@ -191,7 +207,9 @@ class ApiServices {
       }
       return null;
     } else {
-      print('Gagal mengambil profil pengguna: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal mengambil profil pengguna: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal memuat profil pengguna.');
     }
   }
@@ -207,49 +225,73 @@ class ApiServices {
     if (sortBy != null) queryParams['sort_by'] = sortBy;
     if (categoryId != null) queryParams['category_id'] = categoryId.toString();
     if (search != null) queryParams['search'] = search;
-    if (tagSearch != null && tagSearch.isNotEmpty) queryParams['tag'] = tagSearch;
+    if (tagSearch != null && tagSearch.isNotEmpty)
+      queryParams['tag'] = tagSearch;
 
-    Uri uri = Uri.parse('$_baseUrl/posts').replace(queryParameters: queryParams);
+    Uri uri = Uri.parse(
+      '$_baseUrl/posts',
+    ).replace(queryParameters: queryParams);
 
-    final response = await http.get(
-      uri,
-      headers: await _getHeaders(),
-    );
+    final response = await http.get(uri, headers: await _getHeaders());
 
     if (response.statusCode == 200) {
       try {
         final dynamic decodedBody = jsonDecode(response.body);
         if (decodedBody is! Map<String, dynamic>) {
-          print('Error: Respons API top-level untuk /posts bukan Map. Tipe aktual: ${decodedBody.runtimeType}. Body: ${response.body}');
-          throw Exception('Format respons API tidak valid: Respons top-level bukan objek JSON.');
+          print(
+            'Error: Respons API top-level untuk /posts bukan Map. Tipe aktual: ${decodedBody.runtimeType}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Format respons API tidak valid: Respons top-level bukan objek JSON.',
+          );
         }
 
         final dynamic paginationData = decodedBody['data'];
         if (paginationData is! Map<String, dynamic>) {
-          print('Error: Kunci "data" pertama dalam respons API /posts bukan Map. Tipe aktual: ${paginationData.runtimeType}. Body: ${response.body}');
-          throw Exception('Format respons API tidak valid: Kunci "data" pertama bukan objek JSON.');
+          print(
+            'Error: Kunci "data" pertama dalam respons API /posts bukan Map. Tipe aktual: ${paginationData.runtimeType}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Format respons API tidak valid: Kunci "data" pertama bukan objek JSON.',
+          );
         }
 
         final dynamic postsList = paginationData['data'];
         if (postsList is! List<dynamic>) {
-          print('Error: Kunci "data" bersarang dalam respons API /posts bukan List. Tipe aktual: ${postsList.runtimeType}. Body: ${response.body}');
-          throw Exception('Format respons API tidak valid: Kunci "data" bersarang bukan array JSON.');
+          print(
+            'Error: Kunci "data" bersarang dalam respons API /posts bukan List. Tipe aktual: ${postsList.runtimeType}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Format respons API tidak valid: Kunci "data" bersarang bukan array JSON.',
+          );
         }
-        return postsList.map((json) => Post.fromJson(json as Map<String, dynamic>)).toList(); // Tambahkan cast
+        return postsList
+            .map((json) => Post.fromJson(json as Map<String, dynamic>))
+            .toList(); // Tambahkan cast
       } catch (e) {
-        print('Error memparsing respons API postingan: $e. Body: ${response.body}');
-        throw Exception('Gagal memparsing postingan dari respons API: ${e.toString()}');
+        print(
+          'Error memparsing respons API postingan: $e. Body: ${response.body}',
+        );
+        throw Exception(
+          'Gagal memparsing postingan dari respons API: ${e.toString()}',
+        );
       }
     } else {
-      print('Gagal mengambil postingan: ${response.statusCode} - ${response.body}');
-      throw Exception('Gagal memuat postingan. Status code: ${response.statusCode}');
+      print(
+        'Gagal mengambil postingan: ${response.statusCode} - ${response.body}',
+      );
+      throw Exception(
+        'Gagal memuat postingan. Status code: ${response.statusCode}',
+      );
     }
   }
 
   // --- Fungsi Baru: Mendapatkan postingan berdasarkan user ID ---
   Future<List<Post>> getPostsByUser(int userId) async {
     final response = await http.get(
-      Uri.parse('$_baseUrl/users/$userId/posts'), // Asumsi endpoint users/{id}/posts
+      Uri.parse(
+        '$_baseUrl/users/$userId/posts',
+      ), // Asumsi endpoint users/{id}/posts
       headers: await _getHeaders(),
     );
 
@@ -257,23 +299,42 @@ class ApiServices {
       try {
         final dynamic decodedBody = jsonDecode(response.body);
         if (decodedBody is! Map<String, dynamic>) {
-          print('Error: Respons API top-level untuk /users/$userId/posts bukan Map. Tipe aktual: ${decodedBody.runtimeType}. Body: ${response.body}');
-          throw Exception('Format respons API tidak valid: Respons top-level bukan objek JSON.');
+          print(
+            'Error: Respons API top-level untuk /users/$userId/posts bukan Map. Tipe aktual: ${decodedBody.runtimeType}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Format respons API tidak valid: Respons top-level bukan objek JSON.',
+          );
         }
 
-        final dynamic postsList = decodedBody['data']; // Asumsi tidak ada paginasi ganda di sini
+        final dynamic postsList =
+            decodedBody['data']; // Asumsi tidak ada paginasi ganda di sini
         if (postsList is! List<dynamic>) {
-          print('Error: Kunci "data" dalam respons API /users/$userId/posts bukan List. Tipe aktual: ${postsList.runtimeType}. Body: ${response.body}');
-          throw Exception('Format respons API tidak valid: Kunci "data" bukan array JSON.');
+          print(
+            'Error: Kunci "data" dalam respons API /users/$userId/posts bukan List. Tipe aktual: ${postsList.runtimeType}. Body: ${response.body}',
+          );
+          throw Exception(
+            'Format respons API tidak valid: Kunci "data" bukan array JSON.',
+          );
         }
-        return postsList.map((json) => Post.fromJson(json as Map<String, dynamic>)).toList();
+        return postsList
+            .map((json) => Post.fromJson(json as Map<String, dynamic>))
+            .toList();
       } catch (e) {
-        print('Error memparsing respons API postingan user: $e. Body: ${response.body}');
-        throw Exception('Gagal memparsing postingan user dari respons API: ${e.toString()}');
+        print(
+          'Error memparsing respons API postingan user: $e. Body: ${response.body}',
+        );
+        throw Exception(
+          'Gagal memparsing postingan user dari respons API: ${e.toString()}',
+        );
       }
     } else {
-      print('Gagal mengambil postingan user: ${response.statusCode} - ${response.body}');
-      throw Exception('Gagal memuat postingan user. Status code: ${response.statusCode}');
+      print(
+        'Gagal mengambil postingan user: ${response.statusCode} - ${response.body}',
+      );
+      throw Exception(
+        'Gagal memuat postingan user. Status code: ${response.statusCode}',
+      );
     }
   }
 
@@ -285,17 +346,27 @@ class ApiServices {
 
     if (response.statusCode == 200) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
-        return Post.fromJson(decodedBody['data'] as Map<String, dynamic>); // Tambahkan cast
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
+        return Post.fromJson(
+          decodedBody['data'] as Map<String, dynamic>,
+        ); // Tambahkan cast
       }
       throw Exception('Format respons API detail postingan tidak sesuai.');
     } else {
-      print('Gagal mengambil detail postingan: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal mengambil detail postingan: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal memuat detail postingan.');
     }
   }
 
-  Future<Post?> createPost(String title, String content, int categoryId, String tags) async {
+  Future<Post?> createPost(
+    String title,
+    String content,
+    int categoryId,
+    String tags,
+  ) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/posts'),
       headers: await _getHeaders(),
@@ -309,17 +380,28 @@ class ApiServices {
 
     if (response.statusCode == 201) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
-        return Post.fromJson(decodedBody['data'] as Map<String, dynamic>); // Tambahkan cast
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
+        return Post.fromJson(
+          decodedBody['data'] as Map<String, dynamic>,
+        ); // Tambahkan cast
       }
       return null;
     } else {
-      print('Gagal membuat postingan: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal membuat postingan: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal membuat postingan.');
     }
   }
 
-  Future<bool> updatePost(int postId, String title, String content, int categoryId, String tags) async {
+  Future<bool> updatePost(
+    int postId,
+    String title,
+    String content,
+    int categoryId,
+    String tags,
+  ) async {
     final response = await http.put(
       Uri.parse('$_baseUrl/posts/$postId'),
       headers: await _getHeaders(),
@@ -348,20 +430,29 @@ class ApiServices {
 
     if (response.statusCode == 200) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
         final dynamic commentsList = decodedBody['data'];
         if (commentsList is List<dynamic>) {
-          return commentsList.map((json) => Comment.fromJson(json as Map<String, dynamic>)).toList(); // Tambahkan cast
+          return commentsList
+              .map((json) => Comment.fromJson(json as Map<String, dynamic>))
+              .toList(); // Tambahkan cast
         }
       }
       return [];
     } else {
-      print('Gagal mengambil komentar: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal mengambil komentar: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal memuat komentar.');
     }
   }
 
-  Future<Comment?> addComment(int postId, String content, {int? parentCommentId}) async {
+  Future<Comment?> addComment(
+    int postId,
+    String content, {
+    int? parentCommentId,
+  }) async {
     final response = await http.post(
       Uri.parse('$_baseUrl/posts/$postId/comments'),
       headers: await _getHeaders(),
@@ -373,12 +464,17 @@ class ApiServices {
 
     if (response.statusCode == 201) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
-        return Comment.fromJson(decodedBody['data'] as Map<String, dynamic>); // Tambahkan cast
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
+        return Comment.fromJson(
+          decodedBody['data'] as Map<String, dynamic>,
+        ); // Tambahkan cast
       }
       return null;
     } else {
-      print('Gagal menambahkan komentar: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal menambahkan komentar: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal menambahkan komentar.');
     }
   }
@@ -421,13 +517,18 @@ class ApiServices {
     );
     if (response.statusCode == 200) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
         List<dynamic> data = decodedBody['data'];
-        return data.map((json) => Category.fromJson(json as Map<String, dynamic>)).toList(); // Tambahkan cast
+        return data
+            .map((json) => Category.fromJson(json as Map<String, dynamic>))
+            .toList(); // Tambahkan cast
       }
       return [];
     } else {
-      print('Gagal mengambil kategori: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal mengambil kategori: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal memuat kategori.');
     }
   }
@@ -439,9 +540,12 @@ class ApiServices {
     );
     if (response.statusCode == 200) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
         List<dynamic> data = decodedBody['data'];
-        return data.map((json) => Tag.fromJson(json as Map<String, dynamic>)).toList(); // Tambahkan cast
+        return data
+            .map((json) => Tag.fromJson(json as Map<String, dynamic>))
+            .toList(); // Tambahkan cast
       }
       return [];
     } else {
@@ -460,13 +564,20 @@ class ApiServices {
 
     if (response.statusCode == 200) {
       final dynamic decodedBody = jsonDecode(response.body);
-      if (decodedBody is Map<String, dynamic> && decodedBody.containsKey('data')) {
+      if (decodedBody is Map<String, dynamic> &&
+          decodedBody.containsKey('data')) {
         List<dynamic> data = decodedBody['data'];
-        return data.map((json) => AppNotification.fromJson(json as Map<String, dynamic>)).toList();
+        return data
+            .map(
+              (json) => AppNotification.fromJson(json as Map<String, dynamic>),
+            )
+            .toList();
       }
       return [];
     } else {
-      print('Gagal mengambil notifikasi: ${response.statusCode} - ${response.body}');
+      print(
+        'Gagal mengambil notifikasi: ${response.statusCode} - ${response.body}',
+      );
       throw Exception('Gagal memuat notifikasi.');
     }
   }
@@ -474,7 +585,9 @@ class ApiServices {
   Future<int> getUnreadNotificationCount() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/notifications/unread-count'), // Sesuai dengan routes/api.php
+        Uri.parse(
+          '$_baseUrl/notifications/unread-count',
+        ), // Sesuai dengan routes/api.php
         headers: await _getHeaders(),
       );
 
@@ -510,51 +623,64 @@ class ApiServices {
   Future<List<CommentDetail>> getCommentDetails({
     String? authorName,
     int? postId, // <--- Ganti postTitle jadi postId
-    String? sortBy, 
+    String? sortBy,
     int page = 1,
   }) async {
-    Map<String, String> queryParams = {
-      'page': page.toString(),
-    };
+    Map<String, String> queryParams = {'page': page.toString()};
 
     if (postId != null) {
       queryParams['post_id'] = postId.toString(); // <--- Kirim ID
     }
 
-    Uri uri = Uri.parse('$_baseUrl/comments/details').replace(queryParameters: queryParams);
+    Uri uri = Uri.parse(
+      '$_baseUrl/comments/details',
+    ).replace(queryParameters: queryParams);
 
-    final response = await http.get(
-      uri,
-      headers: await _getHeaders(),
-    );
+    final response = await http.get(uri, headers: await _getHeaders());
 
     if (response.statusCode == 200) {
       try {
         final dynamic decodedBody = jsonDecode(response.body);
         if (decodedBody is! Map<String, dynamic>) {
-          throw Exception('Format respons API top-level untuk comments/details bukan Map. Tipe aktual: ${decodedBody.runtimeType}.');
+          throw Exception(
+            'Format respons API top-level untuk comments/details bukan Map. Tipe aktual: ${decodedBody.runtimeType}.',
+          );
         }
 
         final dynamic paginationData = decodedBody['data'];
         if (paginationData is! Map<String, dynamic>) {
-          throw Exception('Format respons API tidak valid: Kunci "data" pertama dalam respons comments/details bukan Map. Tipe aktual: ${paginationData.runtimeType}.');
+          throw Exception(
+            'Format respons API tidak valid: Kunci "data" pertama dalam respons comments/details bukan Map. Tipe aktual: ${paginationData.runtimeType}.',
+          );
         }
 
-        final dynamic commentsList = paginationData['data']; // Ini adalah array data dari Laravel Paginate
+        final dynamic commentsList =
+            paginationData['data']; // Ini adalah array data dari Laravel Paginate
         if (commentsList is! List<dynamic>) {
-          throw Exception('Format respons API tidak valid: Kunci "data" bersarang dalam respons comments/details bukan List. Tipe aktual: ${commentsList.runtimeType}.');
+          throw Exception(
+            'Format respons API tidak valid: Kunci "data" bersarang dalam respons comments/details bukan List. Tipe aktual: ${commentsList.runtimeType}.',
+          );
         }
-        return commentsList.map((json) => CommentDetail.fromJson(json as Map<String, dynamic>)).toList();
+        return commentsList
+            .map((json) => CommentDetail.fromJson(json as Map<String, dynamic>))
+            .toList();
       } catch (e) {
-        print('Error memparsing respons API detail komentar: $e. Body: ${response.body}');
-        throw Exception('Gagal memparsing detail komentar dari respons API: ${e.toString()}');
+        print(
+          'Error memparsing respons API detail komentar: $e. Body: ${response.body}',
+        );
+        throw Exception(
+          'Gagal memparsing detail komentar dari respons API: ${e.toString()}',
+        );
       }
     } else {
-      print('Gagal mengambil detail komentar: ${response.statusCode} - ${response.body}');
-      throw Exception('Gagal memuat detail komentar. Status code: ${response.statusCode}');
+      print(
+        'Gagal mengambil detail komentar: ${response.statusCode} - ${response.body}',
+      );
+      throw Exception(
+        'Gagal memuat detail komentar. Status code: ${response.statusCode}',
+      );
     }
   }
-
 
   // --- ADMIN FEATURES ---
   Future<Map<String, dynamic>> getAdminDashboardStats() async {
@@ -570,7 +696,7 @@ class ApiServices {
       throw Exception('Gagal memuat statistik admin');
     }
   }
-  
+
   // Fungsi delete post (jika belum ada)
   Future<bool> deletePost(int postId) async {
     final response = await http.delete(
@@ -582,7 +708,10 @@ class ApiServices {
 
   // Like Komentar
   Future<bool> toggleCommentLike(int commentId) async {
-    final response = await http.post(Uri.parse('$_baseUrl/comments/$commentId/like'), headers: await _getHeaders());
+    final response = await http.post(
+      Uri.parse('$_baseUrl/comments/$commentId/like'),
+      headers: await _getHeaders(),
+    );
     return response.statusCode == 200;
   }
 
@@ -595,19 +724,25 @@ class ApiServices {
     );
     return response.statusCode == 200;
   }
-  
+
   // Admin: Get Reports
   Future<List<dynamic>> getReports() async {
-    final response = await http.get(Uri.parse('$_baseUrl/admin/reports'), headers: await _getHeaders());
+    final response = await http.get(
+      Uri.parse('$_baseUrl/admin/reports'),
+      headers: await _getHeaders(),
+    );
     if (response.statusCode == 200) {
       return jsonDecode(response.body)['data'];
     }
     return [];
   }
-  
+
   // Admin: Dismiss Report
   Future<void> dismissReport(int id) async {
-    await http.delete(Uri.parse('$_baseUrl/admin/reports/$id'), headers: await _getHeaders());
+    await http.delete(
+      Uri.parse('$_baseUrl/admin/reports/$id'),
+      headers: await _getHeaders(),
+    );
   }
 
   // UPDATE PROFIL PICTURE
@@ -620,10 +755,9 @@ class ApiServices {
     request.headers['Accept'] = 'application/json';
 
     // Attach File
-    request.files.add(await http.MultipartFile.fromPath(
-      'image', 
-      imageFile.path,
-    ));
+    request.files.add(
+      await http.MultipartFile.fromPath('image', imageFile.path),
+    );
 
     try {
       var streamedResponse = await request.send();
@@ -642,7 +776,13 @@ class ApiServices {
   }
 
   // CREATE POST DENGAN GAMBAR
-  Future<Post?> createPostWithMedia(String title, String content, int categoryId, String tags, File? mediaFile) async {
+  Future<Post?> createPostWithMedia(
+    String title,
+    String content,
+    int categoryId,
+    String tags,
+    File? mediaFile,
+  ) async {
     String? token = await _getToken();
     var uri = Uri.parse('$_baseUrl/posts');
     var request = http.MultipartRequest('POST', uri);
@@ -658,19 +798,20 @@ class ApiServices {
 
     // Add File (Jika ada)
     if (mediaFile != null) {
-        // Cek apakah file benar-benar ada
-        if (await mediaFile.exists()) {
-            request.files.add(await http.MultipartFile.fromPath(
-                'media', 
-                mediaFile.path,
-            ));
-        } else {
-            print("File tidak ditemukan di path: ${mediaFile.path}");
-        }
+      // Cek apakah file benar-benar ada
+      if (await mediaFile.exists()) {
+        request.files.add(
+          await http.MultipartFile.fromPath('media', mediaFile.path),
+        );
+      } else {
+        print("File tidak ditemukan di path: ${mediaFile.path}");
+      }
     }
 
     try {
-      var streamedResponse = await request.send().timeout(const Duration(seconds: 30));
+      var streamedResponse = await request.send().timeout(
+        const Duration(seconds: 30),
+      );
       var response = await http.Response.fromStream(streamedResponse);
 
       if (response.statusCode == 201) {

@@ -189,47 +189,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
 
-                      // Row: Ingat Saya & Lupa Password
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Row(
-                            children: [
-                              SizedBox(
-                                height: 24,
-                                width: 24,
-                                child: Checkbox(
-                                  value: _rememberMe,
-                                  activeColor: accentColor,
-                                  checkColor: Colors.white,
-                                  side: BorderSide(color: subTextColor),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                                  onChanged: (val) {
-                                    setState(() {
-                                      _rememberMe = val ?? false;
-                                    });
-                                  },
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text('Ingat saya', style: TextStyle(fontSize: 13, color: textColor)),
-                            ],
-                          ),
-                          TextButton(
-                            onPressed: () {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(content: Text('Fitur reset password belum tersedia')),
-                              );
-                            },
-                            child: Text(
-                              'Lupa password?',
-                              style: TextStyle(color: accentColor, fontSize: 13, fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                        ],
-                      ),
-
                       const SizedBox(height: 24),
 
                       // Tombol Login

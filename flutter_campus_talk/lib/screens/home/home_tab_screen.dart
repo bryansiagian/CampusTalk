@@ -21,20 +21,62 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
   List<Post> _posts = [];
   bool _isLoadingPosts = true;
   User? _currentUser;
+  
+  // State Notifikasi
+  int _unreadNotificationCount = 0; 
+
+  // State Filter Kategori
+  int _selectedCategoryIndex = 0;
+  final List<String> _categories = [
+    "Semua", "Tugas Kuliah", "Pengumuman", "Magang", "Skripsi", "Tips & Trik"
+  ];
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
     _fetchPosts();
+    _fetchUnreadNotifications();
   }
 
-  // Helper URL Gambar
+  final String _serverIp = '10.180.3.115'; 
+  final String _port = '8000';
+
   String _fixImageUrl(String url) {
-    if (url.startsWith('/')) return 'http://10.0.2.2:8000$url';
-    if (url.contains('localhost')) return url.replaceAll('localhost', '10.0.2.2');
-    if (url.contains('127.0.0.1')) return url.replaceAll('127.0.0.1', '10.0.2.2');
-    return url;
+    if (url.isEmpty) return "";
+    
+    // 1. Bersihkan spasi
+    url = url.trim();
+
+    // 2. Jika URL sudah lengkap (http/https), kita hanya perlu mengganti Host-nya
+    if (url.startsWith('http')) {
+      return url
+          .replaceAll('localhost', _serverIp)
+          .replaceAll('127.0.0.1', _serverIp)
+          .replaceAll('10.0.2.2', _serverIp);
+    }
+
+    // 3. Menangani Path Relatif (Contoh: "/storage/posts/..." atau "posts/...")
+    
+    // Hapus slash di depan jika ada, agar penggabungan rapi
+    if (url.startsWith('/')) {
+      url = url.substring(1); 
+    }
+
+    // Cek apakah path sudah mengandung kata 'storage'
+    // Laravel biasanya menyimpan di 'public/posts/img.jpg', tapi diakses lewat 'storage/posts/img.jpg'
+    // Jika path dari DB adalah 'posts/img.jpg', kita harus tambahkan 'storage/'
+    if (!url.startsWith('storage')) {
+      url = 'storage/$url';
+    }
+
+    // Gabungkan menjadi URL utuh
+    final finalUrl = 'http://$_serverIp:$_port/$url';
+    
+    // DEBUG: Cek URL ini di terminal jika masih gagal
+    print("Fixed URL: $finalUrl"); 
+    
+    return finalUrl;
   }
 
   Future<void> _fetchUserData() async {
@@ -46,15 +88,19 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
     }
   }
 
-  // Fetch Postingan Terbaru (Tanpa Filter Kategori)
+  Future<void> _fetchUnreadNotifications() async {
+    try {
+      final count = await _apiServices.getUnreadNotificationCount();
+      if (mounted) setState(() => _unreadNotificationCount = count);
+    } catch (e) {
+      print("Error fetching notification count: $e");
+    }
+  }
+
   Future<void> _fetchPosts() async {
     setState(() => _isLoadingPosts = true);
     try {
-      // Langsung ambil semua postingan terbaru
-      final posts = await _apiServices.getPosts(
-        sortBy: 'latest', 
-      );
-      
+      final posts = await _apiServices.getPosts(sortBy: 'latest');
       if (mounted) {
         setState(() {
           _posts = posts;
@@ -68,8 +114,11 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
   }
 
   Future<void> _handleRefresh() async {
-    await _fetchUserData();
-    await _fetchPosts();
+    await Future.wait([
+      _fetchUserData(),
+      _fetchPosts(),
+      _fetchUnreadNotifications(),
+    ]);
   }
 
   String _calculateTimeAgo(String createdAt) {
@@ -93,7 +142,6 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // Tema Dinamis
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     final textTheme = theme.textTheme;
@@ -105,65 +153,7 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       
-      appBar: AppBar(
-        backgroundColor: theme.appBarTheme.backgroundColor ?? theme.cardColor,
-        elevation: 0,
-        scrolledUnderElevation: 0,
-        title: Text(
-          "CampusTalk", 
-          style: TextStyle(
-            color: colorScheme.primary, 
-            fontSize: 22, 
-            fontWeight: FontWeight.w800,
-            letterSpacing: 0.5
-          )
-        ),
-        centerTitle: false,
-        actions: [
-          // 1. TOMBOL CARI (Menuju SearchScreen)
-          IconButton(
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const SearchScreen()));
-            },
-            icon: Icon(Icons.search, color: textTheme.bodyLarge?.color, size: 26),
-            tooltip: "Cari Postingan",
-          ),
-          
-          // 2. TOMBOL NOTIFIKASI
-          IconButton(
-            onPressed: () {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationScreen()));
-            },
-            icon: Icon(Icons.notifications_none_rounded, color: textTheme.bodyLarge?.color, size: 26),
-          ),
-
-          // 3. AVATAR PROFIL
-          Padding(
-            padding: const EdgeInsets.only(right: 16.0, left: 8.0),
-            child: GestureDetector(
-              onTap: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()))
-                    .then((_) => _handleRefresh());
-              },
-              child: CircleAvatar(
-                radius: 16,
-                backgroundColor: searchBarColor,
-                backgroundImage: (_currentUser != null && _currentUser!.profilePictureUrl != null)
-                    ? NetworkImage(_fixImageUrl(_currentUser!.profilePictureUrl!))
-                    : null,
-                child: (_currentUser == null || _currentUser!.profilePictureUrl == null)
-                    ? Icon(Icons.person, size: 20, color: iconColor)
-                    : null,
-              ),
-            ),
-          ),
-        ],
-        bottom: PreferredSize(
-          preferredSize: const Size.fromHeight(1),
-          child: Container(color: theme.dividerColor, height: 1),
-        ),
-      ),
-
+      // Floating Action Button tetap di Scaffold
       floatingActionButton: FloatingActionButton(
         onPressed: () {
           Navigator.push(
@@ -179,13 +169,96 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
         child: Icon(Icons.add, color: colorScheme.onPrimary, size: 32),
       ),
 
+      // Body menggunakan CustomScrollView untuk efek Sliver
       body: RefreshIndicator(
         onRefresh: _handleRefresh,
         color: colorScheme.primary,
         child: CustomScrollView(
           physics: const AlwaysScrollableScrollPhysics(),
           slivers: [
-            // 1. LIST POSTINGAN (FEED)
+            
+            // 1. APP BAR YANG BISA HILANG (SLIVER)
+            SliverAppBar(
+              backgroundColor: theme.appBarTheme.backgroundColor ?? theme.cardColor,
+              elevation: 0,
+              scrolledUnderElevation: 0,
+              
+              // --- KONFIGURASI HIDE ON SCROLL ---
+              floating: true, // Muncul segera saat scroll ke atas
+              snap: true,     // Langsung muncul penuh
+              pinned: false,  // Ikut menghilang saat scroll ke bawah
+              // ----------------------------------
+              
+              title: Text(
+                "CampusTalk", 
+                style: TextStyle(color: colorScheme.primary, fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 0.5)
+              ),
+              centerTitle: false,
+              actions: [
+                // SEARCH
+                IconButton(
+                  onPressed: () {
+                    Navigator.push(context, MaterialPageRoute(builder: (context) => const SearchScreen()));
+                  },
+                  icon: Icon(Icons.search, color: textTheme.bodyLarge?.color, size: 26),
+                ),
+                
+                // NOTIFIKASI
+                Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    IconButton(
+                      onPressed: () {
+                        Navigator.push(context, MaterialPageRoute(builder: (context) => const NotificationScreen()))
+                            .then((_) => _fetchUnreadNotifications());
+                      },
+                      icon: Icon(Icons.notifications_none_rounded, color: textTheme.bodyLarge?.color, size: 26),
+                    ),
+                    if (_unreadNotificationCount > 0)
+                      Positioned(
+                        right: 8, top: 8,
+                        child: Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                          constraints: const BoxConstraints(minWidth: 16, minHeight: 16),
+                          child: Text(
+                            _unreadNotificationCount > 9 ? '9+' : '$_unreadNotificationCount',
+                            style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+
+                // PROFIL
+                Padding(
+                  padding: const EdgeInsets.only(right: 16.0, left: 8.0),
+                  child: GestureDetector(
+                    onTap: () {
+                      Navigator.push(context, MaterialPageRoute(builder: (context) => const ProfileScreen()))
+                          .then((_) => _handleRefresh());
+                    },
+                    child: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: searchBarColor,
+                      backgroundImage: (_currentUser != null && _currentUser!.profilePictureUrl != null && _currentUser!.profilePictureUrl!.isNotEmpty)
+                          ? NetworkImage(_fixImageUrl(_currentUser!.profilePictureUrl!))
+                          : null,
+                      child: (_currentUser == null || _currentUser!.profilePictureUrl == null || _currentUser!.profilePictureUrl!.isEmpty)
+                          ? Icon(Icons.person, size: 20, color: iconColor)
+                          : null,
+                    ),
+                  ),
+                ),
+              ],
+              bottom: PreferredSize(
+                preferredSize: const Size.fromHeight(1),
+                child: Container(color: theme.dividerColor, height: 1),
+              ),
+            ),
+
+            // 3. LIST POSTINGAN
             if (_isLoadingPosts)
               SliverFillRemaining(child: Center(child: CircularProgressIndicator(color: colorScheme.primary)))
             else if (_posts.isEmpty)
@@ -210,7 +283,8 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                   childCount: _posts.length,
                 ),
               ),
-              
+            
+            // Spacer bawah agar FAB tidak menutupi konten terakhir
             const SliverToBoxAdapter(child: SizedBox(height: 80)),
           ],
         ),
@@ -223,13 +297,15 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
     final textSecondary = theme.textTheme.bodyMedium?.color;
     final borderColor = theme.dividerColor;
 
+    // Cek apakah Author punya foto
+    bool hasAuthorPhoto = post.author.profilePictureUrl != null && post.author.profilePictureUrl!.isNotEmpty;
+
     return InkWell(
       onTap: () {
         Navigator.push(context, MaterialPageRoute(builder: (context) => PostDetailScreen(postId: post.id)))
             .then((_) => _handleRefresh());
       },
       child: Container(
-        // Background color dipindah ke dalam BoxDecoration
         margin: const EdgeInsets.only(bottom: 1),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         decoration: BoxDecoration(
@@ -239,14 +315,17 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Avatar Penulis
+            // AVATAR PENULIS
             CircleAvatar(
               radius: 22,
               backgroundColor: _getAvatarColor(post.author.name),
-              backgroundImage: post.author.profilePictureUrl != null 
+              backgroundImage: hasAuthorPhoto 
                   ? NetworkImage(_fixImageUrl(post.author.profilePictureUrl!))
                   : null,
-              child: post.author.profilePictureUrl == null
+              onBackgroundImageError: hasAuthorPhoto 
+                  ? (_, __) { print("Error load author image"); } 
+                  : null,
+              child: !hasAuthorPhoto
                   ? Text(
                       post.author.name.isNotEmpty ? post.author.name[0].toUpperCase() : "?", 
                       style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)
@@ -254,13 +333,11 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                   : null,
             ),
             const SizedBox(width: 12),
-            
-            // Konten Postingan
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Header (Nama & Waktu)
+                  // HEADER (NAMA & WAKTU)
                   Row(
                     children: [
                       Flexible(
@@ -278,16 +355,14 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                       ),
                     ],
                   ),
-                  
-                  // Kategori
                   const SizedBox(height: 2),
                   Text(
                     post.category.name, 
                     style: TextStyle(color: textSecondary, fontSize: 11)
                   ),
-
-                  // Judul & Isi
                   const SizedBox(height: 6),
+                  
+                  // KONTEN TEKS
                   Text(
                     post.title, 
                     style: TextStyle(color: textPrimary, fontSize: 15, fontWeight: FontWeight.w700)
@@ -299,16 +374,14 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                     overflow: TextOverflow.ellipsis
                   ),
                   
-                  // Media (Gambar)
+                  // KONTEN GAMBAR
                   if (post.mediaUrl != null)
                     Padding(
                       padding: const EdgeInsets.only(top: 10),
                       child: ClipRRect(
                         borderRadius: BorderRadius.circular(12),
                         child: Container(
-                          decoration: BoxDecoration(
-                            border: Border.all(color: borderColor)
-                          ),
+                          decoration: BoxDecoration(border: Border.all(color: borderColor)),
                           child: Image.network(
                             _fixImageUrl(post.mediaUrl!),
                             width: double.infinity, height: 200, fit: BoxFit.cover,
@@ -317,8 +390,8 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                         ),
                       ),
                     ),
-
-                  // Tags
+                  
+                  // TAGS
                   if (post.tags != null && post.tags!.isNotEmpty)
                     Padding(
                       padding: const EdgeInsets.only(top: 8.0),
@@ -327,8 +400,8 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                         children: post.tags!.map((t) => Text("#${t.name}", style: TextStyle(color: colorScheme.primary, fontSize: 13))).toList()
                       ),
                     ),
-
-                  // Tombol Aksi (Like, Comment, View)
+                  
+                  // ACTION BUTTONS
                   Padding(
                     padding: const EdgeInsets.only(top: 12.0, right: 16.0),
                     child: Row(
@@ -341,7 +414,6 @@ class _HomeTabScreenState extends State<HomeTabScreen> {
                           post.isLikedByCurrentUser ? Colors.pink : textSecondary
                         ),
                         _buildActionIcon(Icons.bar_chart_rounded, "${post.views}", textSecondary),
-                        Icon(Icons.share_outlined, size: 18, color: textSecondary),
                       ],
                     ),
                   ),
