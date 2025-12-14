@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_spinkit/flutter_spinkit.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:provider/provider.dart'; // Pastikan package provider sudah diinstall
 import 'dart:io';
 import 'dart:async';
 import '../../models/post.dart';
@@ -9,8 +8,6 @@ import '../../models/user.dart';
 import '../../services/api_services.dart';
 import '../post/post_detail_screen.dart';
 import '../auth/login_screen.dart';
-// Pastikan Anda memiliki file ini untuk manajemen tema
-import '../../providers/theme_provider.dart'; 
 
 class ProfileScreen extends StatefulWidget {
   final int? userId; // JIKA NULL = PROFIL SAYA, JIKA ADA ANGKA = ORANG LAIN
@@ -27,6 +24,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   late Future<List<Post>> _userPostsFuture = Future.value([]);
   final ImagePicker _picker = ImagePicker();
 
+  // STATE BARU: Kontrol Tampilkan Semua Postingan
+  bool _showAllPosts = false; 
+
   // Cek apakah ini profil saya sendiri
   bool get _isMyProfile => widget.userId == null;
 
@@ -36,57 +36,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
     _fetchProfileData();
   }
 
+  // Ganti IP ini sesuai IP Laptop Anda
   final String _serverIp = '10.180.3.115'; 
   final String _port = '8000';
 
   String _fixImageUrl(String url) {
     if (url.isEmpty) return "";
-    
-    // 1. Bersihkan spasi
     url = url.trim();
-
-    // 2. Jika URL sudah lengkap (http/https), kita hanya perlu mengganti Host-nya
     if (url.startsWith('http')) {
       return url
           .replaceAll('localhost', _serverIp)
           .replaceAll('127.0.0.1', _serverIp)
           .replaceAll('10.0.2.2', _serverIp);
     }
-
-    // 3. Menangani Path Relatif (Contoh: "/storage/posts/..." atau "posts/...")
-    
-    // Hapus slash di depan jika ada, agar penggabungan rapi
     if (url.startsWith('/')) {
       url = url.substring(1); 
     }
-
-    // Cek apakah path sudah mengandung kata 'storage'
-    // Laravel biasanya menyimpan di 'public/posts/img.jpg', tapi diakses lewat 'storage/posts/img.jpg'
-    // Jika path dari DB adalah 'posts/img.jpg', kita harus tambahkan 'storage/'
     if (!url.startsWith('storage')) {
       url = 'storage/$url';
     }
-
-    // Gabungkan menjadi URL utuh
-    final finalUrl = 'http://$_serverIp:$_port/$url';
-    
-    // DEBUG: Cek URL ini di terminal jika masih gagal
-    print("Fixed URL: $finalUrl"); 
-    
-    return finalUrl;
+    return 'http://$_serverIp:$_port/$url';
   }
 
   void _fetchProfileData() {
+    // Reset state _showAllPosts saat refresh data
+    _showAllPosts = false; 
+
     setState(() {
       if (_isMyProfile) {
-        // --- KASUS 1: PROFIL SAYA ---
         _userProfileFuture = _apiServices.getCurrentUser();
         _userPostsFuture = _userProfileFuture.then((user) {
           return user != null ? _apiServices.getPostsByUser(user.id) : Future.value(<Post>[]);
         });
       } else {
-        // --- KASUS 2: PROFIL ORANG LAIN ---
-        // Pastikan ApiServices punya method getUserById
         _userProfileFuture = _apiServices.getUserById(widget.userId!);
         _userPostsFuture = _apiServices.getPostsByUser(widget.userId!);
       }
@@ -98,15 +80,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _changeProfilePicture() async {
-    // HANYA BISA GANTI FOTO KALAU PROFIL SENDIRI
     if (!_isMyProfile) return;
-
     try {
       final XFile? pickedFile = await _picker.pickImage(
         source: ImageSource.gallery,
         maxWidth: 1024, maxHeight: 1024, imageQuality: 80,
       );
-      
       if (pickedFile != null) {
         File imageFile = File(pickedFile.path);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Mengupload foto...")));
@@ -143,9 +122,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
+  String _formatDate(String dateString) {
+    try {
+      DateTime date = DateTime.parse(dateString);
+      List<String> months = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
+      return "${date.day} ${months[date.month - 1]} ${date.year}";
+    } catch (e) {
+      return dateString;
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Ambil Tema
     final theme = Theme.of(context);
     final isDark = theme.brightness == Brightness.dark;
 
@@ -154,10 +142,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       appBar: AppBar(
         elevation: 0,
         backgroundColor: theme.appBarTheme.backgroundColor,
-        // leading: IconButton(
-        //   icon: Icon(Icons.arrow_back, color: theme.iconTheme.color),
-        //   onPressed: () => Navigator.of(context).pop(),
-        // ),
         title: Text(
           _isMyProfile ? 'Profil Saya' : 'Profil Pengguna',
           style: theme.textTheme.titleLarge?.copyWith(fontSize: 18, fontWeight: FontWeight.bold),
@@ -182,12 +166,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
               return Column(
                 children: [
-                  // Header Profil (Avatar, Nama, Prodi)
                   _buildProfileHeader(user, theme, isDark),
-                  
                   const SizedBox(height: 16),
                   
-                  // Statistik & Postingan
                   FutureBuilder<List<Post>>(
                     future: _userPostsFuture,
                     builder: (context, postsSnapshot) {
@@ -205,9 +186,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         }
                       }
 
+                      // --- LOGIKA PEMBATASAN 3 POSTINGAN ---
+                      // Tentukan berapa item yang akan ditampilkan
+                      int itemCount = 0;
+                      if (posts.isNotEmpty) {
+                        if (_showAllPosts) {
+                          itemCount = posts.length; // Tampilkan semua
+                        } else {
+                          // Jika > 3 ambil 3, jika tidak ambil semua
+                          itemCount = posts.length > 3 ? 3 : posts.length;
+                        }
+                      }
+                      // -------------------------------------
+
                       return Column(
                         children: [
-                          // Kartu Statistik
                           Padding(
                             padding: const EdgeInsets.symmetric(horizontal: 16.0),
                             child: Row(
@@ -221,8 +214,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             ),
                           ),
                           const SizedBox(height: 24),
-                          
-                          // Judul Section Postingan
                           Container(
                             width: double.infinity,
                             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -233,30 +224,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           ),
                           const SizedBox(height: 8),
                           
-                          // List Postingan
                           if (postsSnapshot.connectionState == ConnectionState.waiting)
                              Padding(padding: const EdgeInsets.all(20.0), child: SpinKitThreeBounce(color: theme.primaryColor, size: 20))
                           else if (posts.isEmpty)
                             _buildEmptyPostState(theme)
                           else
-                            ListView.builder(
-                              shrinkWrap: true,
-                              physics: const NeverScrollableScrollPhysics(),
-                              itemCount: posts.length,
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              itemBuilder: (context, index) => _buildPostItem(context, posts[index], theme),
+                            Column(
+                              children: [
+                                // LIST POSTINGAN
+                                ListView.builder(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  itemCount: itemCount, // Gunakan itemCount hasil hitungan di atas
+                                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                                  itemBuilder: (context, index) => _buildPostItem(context, posts[index], theme),
+                                ),
+
+                                // TOMBOL "LIHAT LEBIH BANYAK"
+                                // Muncul hanya jika postingan lebih dari 3 DAN belum di-expand
+                                if (posts.length > 3 && !_showAllPosts)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                    child: TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showAllPosts = true; // Expand semua
+                                        });
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text("Lihat lebih banyak (${posts.length - 3} lagi)", style: TextStyle(color: theme.primaryColor)),
+                                          const Icon(Icons.keyboard_arrow_down, size: 16),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                
+                                // TOMBOL "LIHAT LEBIH SEDIKIT" (Opsional, agar bisa collapse lagi)
+                                if (posts.length > 3 && _showAllPosts)
+                                  Padding(
+                                    padding: const EdgeInsets.symmetric(vertical: 8.0),
+                                    child: TextButton(
+                                      onPressed: () {
+                                        setState(() {
+                                          _showAllPosts = false; // Collapse kembali
+                                        });
+                                      },
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Text("Lihat lebih sedikit", style: TextStyle(color: theme.disabledColor)),
+                                          Icon(Icons.keyboard_arrow_up, size: 16, color: theme.disabledColor),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                              ],
                             ),
                         ],
                       );
                     },
                   ),
-                  
                   const SizedBox(height: 24),
-                  
-                  // Pengaturan (Hanya untuk profil sendiri)
                   if (_isMyProfile)
                     _buildSettingsSection(context, theme),
-
                   const SizedBox(height: 40),
                 ],
               );
@@ -269,8 +301,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildProfileHeader(User user, ThemeData theme, bool isDark) {
     Color containerColor = theme.cardColor;
-
-    // Cek apakah user punya foto
     bool hasPhoto = user.profilePictureUrl != null;
 
     return Container(
@@ -279,128 +309,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       child: Column(
         children: [
-          // --- AVATAR ---
           GestureDetector(
-            onTap: _isMyProfile ? _changeProfilePicture : null,
+            onTap: _changeProfilePicture,
             child: Stack(
               children: [
                 CircleAvatar(
-                  radius: 45,
-                  backgroundColor: theme.primaryColor.withOpacity(0.1),
-                  // PERBAIKAN UTAMA: Kondisional Error Handler
+                  radius: 40,
+                  backgroundColor: Colors.blueAccent,
                   backgroundImage: hasPhoto 
                       ? NetworkImage(_fixImageUrl(user.profilePictureUrl!)) 
                       : null,
                   onBackgroundImageError: hasPhoto
-                      ? (_,__) { print("Error loading profile image"); }
+                      ? (_,__) { print("Error load profile image"); }
                       : null,
-                  
                   child: !hasPhoto
                       ? Text(
                           user.name.isNotEmpty ? user.name[0].toUpperCase() : "?", 
-                          style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: theme.primaryColor)
+                          style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Colors.white)
                         )
                       : null,
                 ),
                 if (_isMyProfile)
                   Positioned(
                     bottom: 0, right: 0,
-                    child: Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: theme.primaryColor,
-                        shape: BoxShape.circle,
-                        border: Border.all(color: theme.scaffoldBackgroundColor, width: 2),
-                      ),
-                      child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                    child: CircleAvatar(
+                      radius: 12, backgroundColor: Colors.white,
+                      child: Icon(Icons.camera_alt, size: 14, color: Colors.black),
                     ),
                   )
               ],
             ),
           ),
-          
           const SizedBox(height: 16),
-          
-          // --- NAMA & EMAIL ---
-          Text(user.name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+          Text(user.name, style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold), textAlign: TextAlign.center),
           const SizedBox(height: 4),
-          Text(user.email, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey)),
-          
+          Text(user.email, style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey), textAlign: TextAlign.center),
           const SizedBox(height: 12),
-          
-          // --- ROLE BADGE ---
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-            decoration: BoxDecoration(
-              color: theme.dividerColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: theme.dividerColor)
-            ),
-            child: Text(
-              user.role?.name.toUpperCase() ?? 'USER', 
-              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)
-            ),
+            decoration: BoxDecoration(color: theme.dividerColor.withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: theme.dividerColor)),
+            child: Text(user.role?.name.toUpperCase() ?? 'USER', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: theme.textTheme.bodyLarge?.color)),
           ),
-
           const SizedBox(height: 16),
-
-          // --- INFORMASI AKADEMIK (PRODI & ANGKATAN) ---
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: theme.scaffoldBackgroundColor,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Column(
-              children: [
-                // Prodi
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.school, size: 16, color: theme.primaryColor),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        user.prodi ?? "Prodi belum diatur", // MENAMPILKAN PRODI
-                        style: theme.textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w500),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 6),
-                // Angkatan
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.calendar_today, size: 16, color: theme.primaryColor),
-                    const SizedBox(width: 8),
-                    Text(
-                      "Angkatan ${user.angkatan ?? '-'}", 
-                      style: theme.textTheme.bodyMedium
-                    ),
-                  ],
-                ),
-              ],
-            ),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.calendar_today, size: 14, color: Colors.grey[500]),
+              const SizedBox(width: 6),
+              Text("Angkatan ${user.angkatan ?? '-'}", style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStatCard(IconData icon, String count, String label, Color iconColor, ThemeData theme) {
+  Widget _buildStatCard(IconData icon, String count, String label, Color color, ThemeData theme) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 16),
         decoration: BoxDecoration(
-          color: theme.cardColor, 
+          color: theme.cardColor,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
+          boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 4))],
         ),
         child: Column(
           children: [
-            Icon(icon, color: iconColor, size: 24),
+            Icon(icon, color: color, size: 24),
             const SizedBox(height: 8),
             Text(count, style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
             Text(label, style: theme.textTheme.bodySmall),
@@ -422,7 +397,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         onTap: () {
           Navigator.of(context).push(
             MaterialPageRoute(builder: (context) => PostDetailScreen(postId: post.id)),
-          );
+          ).then((_) => _refreshProfileAndPosts());
         },
         borderRadius: BorderRadius.circular(12),
         child: Padding(
@@ -441,6 +416,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Icon(Icons.chat_bubble_outline, size: 14, color: theme.iconTheme.color),
                   const SizedBox(width: 4),
                   Text("${post.totalComments}", style: theme.textTheme.bodySmall),
+                  const Spacer(),
+                  Text(_formatDate(post.createdAt), style: TextStyle(fontSize: 10, color: Colors.grey[400])),
                 ],
               )
             ],
@@ -455,11 +432,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       width: double.infinity,
       padding: const EdgeInsets.all(30),
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      decoration: BoxDecoration(
-        color: theme.cardColor,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
-      ),
+      decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: theme.dividerColor.withOpacity(0.5))),
       child: Column(
         children: [
           Icon(Icons.post_add, size: 40, color: Colors.grey[300]),
@@ -471,15 +444,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSettingsSection(BuildContext context, ThemeData theme) {
-    // Cek apakah ThemeProvider tersedia (jika belum di-setup di main.dart, fitur switch theme akan error)
-    // Kita gunakan try-catch atau pengecekan sederhana
-    ThemeProvider? themeProvider;
-    try {
-      themeProvider = Provider.of<ThemeProvider>(context);
-    } catch (e) {
-      // Provider not found
-    }
-
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
       child: Column(
@@ -488,30 +452,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Text("Pengaturan Akun", style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold)),
           const SizedBox(height: 12),
           Container(
-            decoration: BoxDecoration(
-              color: theme.cardColor,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: theme.dividerColor.withOpacity(0.5)),
-            ),
+            decoration: BoxDecoration(color: theme.cardColor, borderRadius: BorderRadius.circular(12), border: Border.all(color: theme.dividerColor.withOpacity(0.5))),
             child: Column(
               children: [
-                // Fitur Switch Theme (Hanya jika Provider ada)
-                if (themeProvider != null)
-                  SwitchListTile(
-                    title: Text("Mode Gelap", style: theme.textTheme.bodyMedium),
-                    secondary: Icon(Icons.dark_mode, color: theme.iconTheme.color, size: 20),
-                    value: themeProvider.isDarkMode,
-                    onChanged: (val) => themeProvider!.toggleTheme(val),
-                    activeColor: theme.primaryColor,
-                  ),
-                if (themeProvider != null)
-                  const Divider(height: 1, indent: 16, endIndent: 16),
-                
-                // _buildSettingItem("Ubah Kata Sandi", theme, onTap: () {
-                //     ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Fitur segera hadir")));
-                // }),
+                _buildSettingItem("Ubah Kata Sandi", onTap: () {}),
                 const Divider(height: 1, indent: 16, endIndent: 16),
-                _buildSettingItem("Keluar dari Akun", theme, isDestructive: true, onTap: _handleLogout),
+                _buildSettingItem("Keluar dari Akun", isDestructive: true, onTap: _handleLogout),
               ],
             ),
           ),
@@ -534,19 +480,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildSettingItem(String title, ThemeData theme, {bool isDestructive = false, required VoidCallback onTap}) {
+  Widget _buildSettingItem(String title, {bool isDestructive = false, required VoidCallback onTap}) {
     return ListTile(
       onTap: onTap,
-      title: Text(
-        title,
-        style: TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w500,
-          color: isDestructive ? Colors.red : theme.textTheme.bodyLarge?.color,
-        ),
-      ),
-      trailing: Icon(Icons.chevron_right, size: 20, color: theme.iconTheme.color),
-      visualDensity: const VisualDensity(vertical: -1),
+      title: Text(title, style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: isDestructive ? Colors.red : Colors.black87)),
+      trailing: const Icon(Icons.chevron_right, size: 18, color: Colors.grey),
+      visualDensity: const VisualDensity(vertical: -2),
     );
   }
 }

@@ -51,8 +51,13 @@ Route::middleware('auth:sanctum')->group(function () {
     // Route untuk mendapatkan postingan yang dibuat oleh user tertentu
     // {user} akan otomatis di-resolve ke instance App\Models\User berdasarkan ID
     Route::get('/users/{user}/posts', function (User $user) {
-        // Memuat relasi author, category, dan tags untuk setiap postingan
-        return response()->json(['data' => $user->posts()->with(['author', 'category', 'tags'])->get()]);
+        return response()->json([
+            'data' => $user->posts()
+                        ->with(['author', 'category', 'tags']) // Load relasi
+                        ->withCount('likes', 'comments')       // <--- TAMBAHKAN INI (WAJIB)
+                        ->orderBy('created_at', 'desc')        // Urutkan dari terbaru
+                        ->get()
+        ]);
     });
     // --- Akhir Rute Baru ---
 
