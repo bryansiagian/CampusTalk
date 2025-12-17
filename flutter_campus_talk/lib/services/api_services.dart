@@ -395,29 +395,57 @@ class ApiServices {
     }
   }
 
+  // UPDATE POST DENGAN GAMBAR
   Future<bool> updatePost(
     int postId,
     String title,
     String content,
     int categoryId,
     String tags,
+    File? newImage,
+    bool deleteOldImage,
   ) async {
-    final response = await http.put(
-      Uri.parse('$_baseUrl/posts/$postId'),
-      headers: await _getHeaders(),
-      body: jsonEncode({
-        'title': title,
-        'content': content,
-        'category_id': categoryId,
-        'tags': tags, // Kirim string "tag1, tag2"
-      }),
-    );
+    String? token = await _getToken();
 
-    if (response.statusCode == 200) {
-      return true;
-    } else {
-      print('Gagal update post: ${response.body}');
-      throw Exception('Gagal memperbarui postingan.');
+    // Trik Laravel: Gunakan POST tapi kirim _method = PUT agar file terbaca
+    var uri = Uri.parse('$_baseUrl/posts/$postId');
+    var request = http.MultipartRequest('POST', uri);
+
+    request.headers['Authorization'] = 'Bearer $token';
+    request.headers['Accept'] = 'application/json';
+
+    // Data Text
+    request.fields['_method'] = 'PUT'; // <--- PENTING!
+    request.fields['title'] = title;
+    request.fields['content'] = content;
+    request.fields['category_id'] = categoryId.toString();
+    request.fields['tags'] = tags;
+
+    // Logika Gambar
+    if (newImage != null) {
+      // Jika ada gambar baru yang dipilih
+      request.files.add(
+        await http.MultipartFile.fromPath('media', newImage.path),
+      );
+    } else if (deleteOldImage) {
+      // Jika user menghapus gambar lama (tapi tidak upload baru)
+      // Kita kirim flag khusus agar backend tahu gambar harus dihapus
+      // Pastikan Controller Laravel Anda menangani logika ini, misal: if request->has('remove_media')
+      request.fields['remove_media'] = 'true';
+    }
+
+    try {
+      var streamedResponse = await request.send();
+      var response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode == 200) {
+        return true;
+      } else {
+        print("Update Gagal: ${response.body}");
+        throw Exception("Gagal update postingan");
+      }
+    } catch (e) {
+      throw Exception("Error update: $e");
     }
   }
 
